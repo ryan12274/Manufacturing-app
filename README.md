@@ -16,7 +16,7 @@ Open http://127.0.0.1:7028. To validate, run `node --test`, `node --check dist/a
 ## Features
 
 - Create, edit, and delete part records with quantities, subsystems, materials, manufacturing processes, owners, deadlines, priorities, CAD links, and shop notes.
-- Follow parts through Not started, Ready, In progress, Blocked, and Complete on the production board.
+- Follow parts through Not started, Preparing, Cutting, Finishing, and Finished on the production board.
 - Search and filter the register. Export the current filtered view as CSV.
 - Track material stock, storage locations, units, and reorder thresholds.
 - Download a JSON backup and restore a validated backup.
@@ -24,7 +24,7 @@ Open http://127.0.0.1:7028. To validate, run `node --test`, `node --check dist/a
 
 ## Shop mode
 
-Select **Shop mode** to use a display-friendly production board. Bookmark the app with `?shop=1` to open directly in shop mode. The five status lanes show large part cards, assigned owners, quantities, manufacturing processes, deadlines, and blocker notes. Start work or mark a part complete with the large action buttons. Status menus allow other transitions. Materials switches to a large inventory view; Exit shop mode returns to the regular workspace.
+Select **Shop mode** to use a display-friendly production board. Bookmark the app with `?shop=1` to open directly in shop mode. The five manufacturing-stage lanes show large part cards, assigned owners, quantities, manufacturing processes, deadlines, and blocker notes. Start preparing or move a part to its next stage with the large action buttons. Status menus allow other transitions. Materials switches to a large inventory view; Exit shop mode returns to the regular workspace.
 
 Fullscreen and Keep awake are optional browser features. If unsupported, the app shows a message and remains usable. Wake lock is requested only after tapping Keep awake and released on leaving shop mode. On smaller displays the lanes wrap; long columns scroll by touch. At 1920-pixel width all five lanes appear side by side.
 
@@ -65,8 +65,16 @@ Implemented against [Onshape's official API reference](https://github.com/onshap
 
 Records are saved in localStorage in the current browser and website origin. This version does not provide accounts, shared team data, cloud synchronization, or file uploads. Separate devices and deployed/local versions have separate workspaces. Clearing browser data removes saved records. Use Backup regularly; CSV exports are for reporting and cannot be restored as a workspace. Concurrent editing in multiple tabs can overwrite changes.
 
-Inventory is tracked manually. Completing a part does not deduct material automatically. Completed status applies to an entire part record and its quantity.
+Inventory is tracked manually. Completing a part does not deduct material automatically. Finished status applies to an entire part record and its quantity.
 
 ## Deployment
 
 Run `node scripts/build-worker.mjs` to create the self-contained Cloudflare Worker at `dist/server/index.js`. It embeds the browser files and serves both the app and its Onshape read-only API routes. `.openai/hosting.json` identifies the private Site; keep its existing access policy. The Site's private authentication boundary protects the API. The browser assets can still be served statically, but Onshape API routes require the Worker. A shared database and member permissions are the next step for team-wide deployment.
+
+## Register and production workflow
+
+The parts register is the planning catalog: part number, material, process, required quantity, subsystem, CAD link, source, priority, and deadline. The production board is the operational view: worker, stage, next-stage action, and a separate Blocked tag. Both use the same records.
+
+Stages are Not started → Preparing → Cutting → Finishing → Finished. Blocked is a boolean tag available in every stage, through card controls or the part editor. Adding or removing it does not move the part or reset its worker. Filter Blocked only to see blockers across all five lanes. Add a reason in shop notes. The tag stays attached when a stage changes until explicitly removed. CSV and JSON backups retain both stage and blocked state.
+
+Old saved records and backups migrate on loading: Ready → Preparing; In progress → Cutting; Complete → Finished. Old Blocked records become Preparing with the Blocked tag because the previous model did not retain a manufacturing stage. Existing assignments and notes are preserved.

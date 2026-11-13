@@ -36,7 +36,7 @@ export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.random
   if(identityMatches.length>1||sameNumber.some(r=>r!==identityMatches[0])){conflicts.push(p.number);continue;}
   const existing=identityMatches[0];
   if(existing){const changed=['name','number','material','cad'].some(k=>existing[k]!==p[k]);if(changed){Object.assign(existing,{name:p.name,number:p.number,material:p.material,cad:p.cad});updated++;}else unchanged++;}
-  else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key},subsystem:'',process:'',quantity:1,owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',notes:''});added++;}
+  else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key},subsystem:'',process:'',quantity:1,owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:''});added++;}
  }
  return {workspace:{...workspace,parts},added,updated,unchanged,conflicts:[...new Set(conflicts)]};
 }
