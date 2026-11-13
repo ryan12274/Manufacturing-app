@@ -30,4 +30,3 @@ Inventory is tracked manually. Completing a part does not deduct material automa
 ## Deployment
 
 Serve `dist/` on any static host. `.openai/hosting.json` identifies the private Sites preview. A shared database and member permissions are the next step for team-wide deployment.
-
