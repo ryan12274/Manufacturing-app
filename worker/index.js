@@ -8,7 +8,7 @@ export default {
    if(request.method!=='GET')return new Response(JSON.stringify({error:'Method not allowed'}),{status:405,headers:{...headers,Allow:'GET'}});
    // Sites authenticates visitors before forwarding private-site requests.
    // No client-supplied target URL or keys are accepted by these endpoints.
-   try{if(url.pathname==='/api/onshape/status'){const settings=onshapeSettings(env);return new Response(JSON.stringify({configured:settings.configured,missing:settings.missing,sourceCount:settings.sources?.length||0}),{headers});}
+   try{if(url.pathname==='/api/onshape/status'){const settings=onshapeSettings(env);return new Response(JSON.stringify({configured:settings.configured,mode:'bom',readOnly:true,missing:settings.missing,sourceCount:settings.sources?.length||0}),{headers});}
     if(url.pathname==='/api/onshape/parts')return new Response(JSON.stringify(await readOnshapeParts(env)),{headers});
     return new Response(JSON.stringify({error:'Not found'}),{status:404,headers});
    }catch(err){const message=err.message;const safe=/^(Onshape |Invalid Onshape |Configure |Too many |A matching )/.test(message)?message:'The Onshape connection failed. Check the server configuration.';return new Response(JSON.stringify({error:safe}),{status:502,headers});}

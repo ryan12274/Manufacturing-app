@@ -42,24 +42,21 @@ This browser-local version does not authenticate users or enforce admin roles. T
 
 The palette uses yellow `#FFD400`, black, white, and deep navy. Yellow is taken from [the official Team 7028 stylesheet](https://www.7028robotics.com/style.css); navy reflects [the official Binary Battalion logo](https://www.7028robotics.com/images/7028-logo.png).
 
-## Onshape API imports
+## Onshape BOM import
 
-Choose **More → Onshape import**. The API connection is initially unconfigured. Add the following runtime settings through the private Site's environment settings when the team has Onshape access. Do not enter credentials into the smart board, commit them to GitHub, or place them in browser storage.
+Choose **More → Onshape import**. This app reads only the configured assembly BOM, using signed GET requests to the Onshape assembly BOM endpoint. It never scans documents, queries Part Studios or part metadata, follows links to other documents, creates a BOM, or writes to Onshape. Requests set generateIfAbsent=false, indented=false, includeExcluded=false, and includeTopLevelAssemblyRow=false. An absent BOM is an error; there is no fallback source.
 
-- `ONSHAPE_ACCESS_KEY`: read-only Onshape API access key, stored as a secret.
-- `ONSHAPE_SECRET_KEY`: matching API secret key, stored as a secret.
-- `ONSHAPE_SOURCE_URLS`: JSON array of one to five Onshape document workspace/version or Part Studio URLs. Store as a secret when documents are private. A source URL has the shape `https://cad.onshape.com/documents/DOCUMENT_ID/w/WORKSPACE_ID`, optionally followed by `/e/ELEMENT_ID`. Versions and microversions can use `v` or `m` in place of `w`.
-- `ONSHAPE_BASE_URL`: optional server origin, default `https://cad.onshape.com`. Enterprise sources must use this same configured Onshape origin.
+Runtime configuration is held in the private Site settings:
 
-For local development, copy `.env.example` to an ignored `.env`, set the values privately, build the Worker, and run `node --env-file=.env scripts/serve.mjs` with a Node version supporting `--env-file`. Redeploy the private Site after changing production runtime values.
+- ONSHAPE_ACCESS_KEY and ONSHAPE_SECRET_KEY: API credentials stored as secrets.
+- ONSHAPE_SOURCE_URLS: a JSON array containing the explicitly approved assembly URL, including its document, workspace/version, and element IDs. The currently authorized source is the assembly link supplied by the owner. Source URLs are stored as secrets.
+- ONSHAPE_BASE_URL: optional Onshape origin, default https://cad.onshape.com.
 
-The server makes signed, read-only requests to Onshape's documented `GET /api/v16/parts/d/{documentId}/{wvm}/{referenceId}` endpoint, or its `/e/{elementId}` variant. It imports only explicit `partNumber` values beginning with `7028`. Names beginning with 7028 are not sufficient. Folder discovery, assembly BOM quantities, configured variants beyond the selected source configuration, and unattended background sync are outside this version's scope.
+The flattened BOM supplies part number, name, material, CAD link, and quantity. Only leaf-part rows whose Part number begins with 7028 import. Subassemblies and excluded rows are skipped. Quantities must be positive whole counts. Repeated imports update linked records' BOM-owned details and quantity while preserving workers, preassignments, stage, blocked tag, notes, processes, subsystem, and deadlines. No part is deleted automatically. Conflicting part numbers are skipped and shown in the import panel.
 
-**Find parts** previews matches. **Import parts** adds new part definitions with quantity 1, Not started status, and no worker assignment. Source identity is retained in JSON backups. Repeating an import does not duplicate parts. Later imports update CAD-owned name, part number, material, and CAD URL for linked records while preserving quantities, workers, advance assignments, status, process, subsystem, notes, and deadlines. Manual records with matching numbers and ambiguous numbers in Onshape are skipped and reported. No import deletes parts. Quantity must be set by the team, since this is not an assembly BOM import.
+Automatic import runs every five minutes while the app is open and visible, after being enabled in this browser. Shop progress and imported records are still stored on this device. The app does not sync local workspaces between devices or run imports while closed.
 
-Opt in to automatic import to add and update matching parts every five minutes while this display is open and visible. The preference is specific to the browser. Sync pauses while dialogs are open and never writes back to Onshape. Its results still belong to the browser-local workspace; other devices do not receive them automatically. Network failures leave the current workspace intact.
-
-Implemented against [Onshape's official API reference](https://github.com/onshape-public/go-client/blob/master/onshape/docs/PartApi.md) and [request-signature authentication guide](https://onshape-public.github.io/docs/auth/apikeys/). Live API verification requires the team's configured credentials and source documents. Automated tests use representative, mocked Onshape responses.
+For local testing, copy .env.example to an ignored .env, enter values privately, build the Worker, then use node --env-file=.env scripts/serve.mjs. Never commit or display credential values. Live testing confirmed read-only access to the owner's existing BOM. Automated tests also enforce the BOM-only GET endpoint and disabled BOM generation.
 
 ## Data storage
 
