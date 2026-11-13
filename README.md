@@ -21,6 +21,18 @@ Open http://127.0.0.1:7028. To validate, run `node --test`, `node --check dist/a
 - Download a JSON backup and restore a validated backup.
 - Explore labeled sample data or use Start empty to clear the sample workspace.
 
+## Shop mode
+
+Select **Shop mode** to use a display-friendly production board. Bookmark the app with `?shop=1` to open directly in shop mode. The five status lanes show large part cards, assigned owners, quantities, manufacturing processes, deadlines, and blocker notes. Start work or mark a part complete with the large action buttons. Status menus allow other transitions. Materials switches to a large inventory view; Exit shop mode returns to the regular workspace.
+
+Fullscreen and Keep awake are optional browser features. If unsupported, the app shows a message and remains usable. Wake lock is requested only after tapping Keep awake and released on leaving shop mode. On smaller displays the lanes wrap; long columns scroll by touch. At 1920-pixel width all five lanes appear side by side.
+
+Shop mode uses the same browser-local workspace as the normal view. It does not sync with other team devices.
+
+## Branding
+
+The palette uses yellow `#FFD400`, black, white, and deep navy. Yellow is taken from [the official Team 7028 stylesheet](https://www.7028robotics.com/style.css); navy reflects [the official Binary Battalion logo](https://www.7028robotics.com/images/7028-logo.png).
+
 ## Data storage
 
 Records are saved in localStorage in the current browser and website origin. This version does not provide accounts, shared team data, cloud synchronization, or file uploads. Separate devices and deployed/local versions have separate workspaces. Clearing browser data removes saved records. Use Backup regularly; CSV exports are for reporting and cannot be restored as a workspace. Concurrent editing in multiple tabs can overwrite changes.
