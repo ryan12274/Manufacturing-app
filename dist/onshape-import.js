@@ -1,6 +1,7 @@
 // Shared by the browser importer and the server API. No credentials belong here.
 export const PART_PREFIX='7028';
 const clean=value=>typeof value==='string'?value.trim().slice(0,500):'';
+const usableBomValue=value=>!!value&&!/^(n\/?a|null|none|undefined|-)$/i.test(value);
 export function mapOnshapeBom(bom,source){
  if(!bom||bom.type!=='flattened'||!Array.isArray(bom.rows)||!Array.isArray(bom.headers))throw new Error('Onshape returned an unexpected BOM response. A flattened BOM is required.');
  if(bom.rows.length>10000)throw new Error('Onshape BOM contains too many rows.');
@@ -12,7 +13,7 @@ export function mapOnshapeBom(bom,source){
   const number=clean(cells[columns.get('partNumber')]);
   if(!item?.partId||row.excluded===true||cells[columns.get('excludeFromBom')]===true){ignored++;continue;}
   const vendor=bomVendor(clean(cells[columns.get('vendor')]),number);
-  if(!number&&!vendor&&!item.isStandardContent){ignored++;continue;}
+  if(!usableBomValue(number)&&!vendor&&!item.isStandardContent){ignored++;continue;}
   const quantity=Number(cells[columns.get('quantity')]);
   if(!Number.isSafeInteger(quantity)||quantity<1)throw new Error('Onshape BOM has an invalid whole-part quantity for '+number+'.');
   if(number.startsWith(PART_PREFIX)&&(!item.documentId||!item.elementId))throw new Error('A matching BOM part is missing its source identity.');
@@ -23,7 +24,7 @@ export function mapOnshapeBom(bom,source){
   if(number.startsWith(PART_PREFIX))parts.push({key,number,name,material:clean(typeof material==='string'?material:material?.displayName),cad,quantity});
   else{
    // A vendor SKU may occur in several CAD rows. Order its combined BOM quantity.
-   const cotsKey=number?JSON.stringify(['bom-cots',source.origin,source.documentId,source.reference,source.referenceId,source.elementId,source.configuration||'',vendor||'Unassigned',number]):key;
+   const cotsKey=usableBomValue(number)?JSON.stringify(['bom-cots',source.origin,source.documentId,source.reference,source.referenceId,source.elementId,source.configuration||'',vendor||'Unassigned',number]):key;
    const previous=purchased.get(cotsKey);
    if(previous){previous.quantity+=quantity;if(!Number.isSafeInteger(previous.quantity))throw new Error('COTS quantity is too large.');}
    else purchased.set(cotsKey,{key:cotsKey,number,name,vendor:vendor||'Unassigned',quantity});
@@ -33,6 +34,7 @@ export function mapOnshapeBom(bom,source){
 }
 
 function bomVendor(value,number){
+ if(!usableBomValue(value))value='';
  if(/^rev(?: robotics)?$/i.test(value))return 'REV';
  if(/^(wcp|west\s?coast products)$/i.test(value))return 'WCP';
  if(value)return value;
@@ -52,14 +54,19 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
  }
  const cots=(workspace.cots||[]).map(i=>({...i}));let added=0,updated=0,unchanged=0;const conflicts=[];
  for(const p of keys.values()){
-  const matches=cots.filter(i=>i.onshape?.key===p.key);
-  const collisions=p.number?cots.filter(i=>i.number.trim()===p.number&&bomVendor(i.vendor,i.number)===p.vendor&&!i.onshape):[];
+  let matches=cots.filter(i=>i.onshape?.key===p.key);
+  // Retain order progress from the first release's placeholder-SKU identities.
+  if(!matches.length&&!usableBomValue(p.number))matches=cots.filter(i=>{
+   if(i.name!==p.name||i.number!==p.number||i.vendor!==p.vendor)return false;
+   try{const old=JSON.parse(i.onshape?.key);const key=JSON.parse(p.key);return old[0]==='bom-cots'&&key[0]==='bom'&&old.slice(1,7).every((v,n)=>v===key[n+1]);}catch{return false;}
+  });
+  const collisions=usableBomValue(p.number)?cots.filter(i=>i.number.trim()===p.number&&bomVendor(i.vendor,i.number)===p.vendor&&!i.onshape):[];
   if(matches.length>1||collisions.length){conflicts.push(p.number||p.name);continue;}
   const existing=matches[0];
   if(existing){
    // Supplier corrections and purchasing progress belong to the shop.
-   const changed=existing.name!==p.name||existing.number!==p.number||existing.needed!==p.quantity;
-   if(changed){Object.assign(existing,{name:p.name,number:p.number,needed:p.quantity});updated++;}else unchanged++;
+   const changed=existing.name!==p.name||existing.number!==p.number||existing.needed!==p.quantity||existing.onshape.key!==p.key;
+   if(changed){Object.assign(existing,{name:p.name,number:p.number,needed:p.quantity,onshape:{...existing.onshape,key:p.key}});updated++;}else unchanged++;
   }else{cots.push({id:idFactory(),name:p.name,number:p.number,vendor:p.vendor,needed:p.quantity,ordered:0,received:0,url:'',eta:'',reference:'',notes:'',onshape:{key:p.key,mode:'bom'}});added++;}
  }
  return {workspace:{...workspace,cots},added,updated,unchanged,conflicts:[...new Set(conflicts)]};
