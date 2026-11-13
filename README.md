@@ -32,9 +32,9 @@ Shop mode uses the same browser-local workspace as the normal view. It does not 
 
 ### Starting and assigning work
 
-Parts are unassigned by default. Starting an unassigned part opens **Who are you?** with name buttons from existing records and a field for a new name. Selecting a name and confirming starts work and saves that worker. Cancel leaves the part unchanged. The same rule applies to status menus and changing status in the part editor.
+Parts are unassigned by default. Starting an unassigned part opens **Who’s working?** with name buttons from existing records and a field for a new name. Selecting a name and confirming starts work and saves that worker. Cancel leaves the part unchanged. The same rule applies to status menus and changing status in the part editor.
 
-The optional **Advance assignment (admin, optional)** field preassigns a worker. Starting that part keeps the advance assignment and skips the name picker. Existing owner assignments are preserved when older workspaces or backups are loaded. Worker selections are separate from advance assignments, so restarting self-selected work asks who is starting it again. CSV exports include both the worker (`owner`) and advance assignment (`assignedTo`).
+The optional **Preassigned worker (optional)** field preassigns a worker. Starting that part keeps the advance assignment and skips the name picker. Existing owner assignments are preserved when older workspaces or backups are loaded. Worker selections are separate from advance assignments, so restarting self-selected work asks who is starting it again. CSV exports include both the worker (`owner`) and advance assignment (`assignedTo`).
 
 This browser-local version does not authenticate users or enforce admin roles. The advance assignment field is an administrative workflow control; restricting it to actual admins requires accounts and permissions.
 
@@ -44,7 +44,7 @@ The palette uses yellow `#FFD400`, black, white, and deep navy. Yellow is taken 
 
 ## Onshape API imports
 
-Open **Onshape import** in the regular workspace. The API connection is initially unconfigured. Add the following runtime settings through the private Site's environment settings when the team has Onshape access. Do not enter credentials into the smart board, commit them to GitHub, or place them in browser storage.
+Choose **More → Onshape import**. The API connection is initially unconfigured. Add the following runtime settings through the private Site's environment settings when the team has Onshape access. Do not enter credentials into the smart board, commit them to GitHub, or place them in browser storage.
 
 - `ONSHAPE_ACCESS_KEY`: read-only Onshape API access key, stored as a secret.
 - `ONSHAPE_SECRET_KEY`: matching API secret key, stored as a secret.
@@ -55,7 +55,7 @@ For local development, copy `.env.example` to an ignored `.env`, set the values 
 
 The server makes signed, read-only requests to Onshape's documented `GET /api/v16/parts/d/{documentId}/{wvm}/{referenceId}` endpoint, or its `/e/{elementId}` variant. It imports only explicit `partNumber` values beginning with `7028`. Names beginning with 7028 are not sufficient. Folder discovery, assembly BOM quantities, configured variants beyond the selected source configuration, and unattended background sync are outside this version's scope.
 
-**Find 7028 parts** previews matches. **Import / update parts** adds new part definitions with quantity 1, Not started status, and no worker assignment. Source identity is retained in JSON backups. Repeating an import does not duplicate parts. Later imports update CAD-owned name, part number, material, and CAD URL for linked records while preserving quantities, workers, advance assignments, status, process, subsystem, notes, and deadlines. Manual records with matching numbers and ambiguous numbers in Onshape are skipped and reported. No import deletes parts. Quantity must be set by the team, since this is not an assembly BOM import.
+**Find parts** previews matches. **Import parts** adds new part definitions with quantity 1, Not started status, and no worker assignment. Source identity is retained in JSON backups. Repeating an import does not duplicate parts. Later imports update CAD-owned name, part number, material, and CAD URL for linked records while preserving quantities, workers, advance assignments, status, process, subsystem, notes, and deadlines. Manual records with matching numbers and ambiguous numbers in Onshape are skipped and reported. No import deletes parts. Quantity must be set by the team, since this is not an assembly BOM import.
 
 Opt in to automatic import to add and update matching parts every five minutes while this display is open and visible. The preference is specific to the browser. Sync pauses while dialogs are open and never writes back to Onshape. Its results still belong to the browser-local workspace; other devices do not receive them automatically. Network failures leave the current workspace intact.
 
@@ -78,3 +78,7 @@ The parts register is the planning catalog: part number, material, process, requ
 Stages are Not started → Preparing → Cutting → Finishing → Finished. Blocked is a boolean tag available in every stage, through card controls or the part editor. Adding or removing it does not move the part or reset its worker. Filter Blocked only to see blockers across all five lanes. Add a reason in shop notes. The tag stays attached when a stage changes until explicitly removed. CSV and JSON backups retain both stage and blocked state.
 
 Old saved records and backups migrate on loading: Ready → Preparing; In progress → Cutting; Complete → Finished. Old Blocked records become Preparing with the Blocked tag because the previous model did not retain a manufacturing stage. Existing assignments and notes are preserved.
+
+## Interface
+
+The header contains Parts, Production, and Materials. Shop mode opens the touch display. More contains Onshape import, CSV export, backup, and restore. The parts screen is a table; production is a five-lane board with compact active, blocked, and finished counts. Cards have one next-stage action, a Block/Unblock control, and a More menu for manual stage changes. The interface uses one stylesheet and system fonts.
