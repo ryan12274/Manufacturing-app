@@ -1,9 +1,10 @@
+import {validCots} from './cots-model.js';
 export const STATUSES = ['Not started', 'Preparing', 'Cutting', 'Finishing', 'Finished'];
 const LEGACY_STATUSES=['Ready','In progress','Blocked','Complete'];
 export const STORAGE_KEY = 'frc7028-workshop-v1';
 export function normalizeAssignments(workspace) {
   const stages={Ready:'Preparing','In progress':'Cutting',Blocked:'Preparing',Complete:'Finished'};
-  return {...workspace,parts:workspace.parts.map(p=>({...p,status:stages[p.status]||p.status,blocked:p.status==='Blocked'||p.blocked===true,assignedTo:p.assignedTo??p.owner}))};
+  return {...workspace,cots:workspace.cots??[],parts:workspace.parts.map(p=>({...p,status:stages[p.status]||p.status,blocked:p.status==='Blocked'||p.blocked===true,assignedTo:p.assignedTo??p.owner}))};
 }
 export function needsWorkerSelection(part,target){
   return ['Preparing','Cutting','Finishing'].includes(target)&&(part.status==='Not started'||part.status==='Finished'||!part.owner.trim());
@@ -16,6 +17,7 @@ export function startPart(part, worker='',target='Preparing') {
 }
 export function validWorkspace(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.parts) || !Array.isArray(data.materials)) return false;
+  if(data.cots!==undefined&&!validCots(data.cots))return false;
   const textFields = (row, fields) => fields.every(field => typeof row[field] === 'string' && row[field].length <= 10000);
   const unique = rows => rows.every(row => row && typeof row === 'object' && (row.blocked===undefined||typeof row.blocked==='boolean') && (row.assignedTo===undefined||typeof row.assignedTo==='string'&&row.assignedTo.length<=500)) && new Set(rows.map(row => row.id)).size === rows.length;
   return unique(data.parts) && unique(data.materials) && data.parts.every(p => p && textFields(p, ['id','name','number','subsystem','owner','material','process','due','priority','status','notes','cad']) && p.id && p.name.trim() && Number.isInteger(p.quantity) && p.quantity > 0 && [...STATUSES,...LEGACY_STATUSES].includes(p.status) && ['Low','Normal','High'].includes(p.priority) && (!p.due || /^\d{4}-\d{2}-\d{2}$/.test(p.due) && !Number.isNaN(Date.parse(p.due)))) && data.materials.every(m => m && textFields(m,['id','name','spec','unit','location']) && m.id && m.name.trim() && Number.isFinite(m.stock) && m.stock >= 0 && Number.isFinite(m.minimum) && m.minimum >= 0);

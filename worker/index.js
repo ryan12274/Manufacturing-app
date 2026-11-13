@@ -1,8 +1,14 @@
 import {onshapeSettings,readOnshapeParts} from './onshape-api.js';
+import {wcpProductData} from './vendors.js';
 // The build embeds the existing browser files into this module as STATIC_FILES.
 export default {
  async fetch(request,env){
   const url=new URL(request.url);
+  if(url.pathname==='/api/vendors/wcp/product'){
+   const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
+   if(request.method!=='GET')return Response.json({error:'Method not allowed'},{status:405,headers});
+   try{return Response.json(await wcpProductData(url.searchParams.get('url')||''),{headers});}catch{return Response.json({error:'Could not resolve the WCP product. Check its link and part number.'},{status:400,headers});}
+  }
   if(url.pathname.startsWith('/api/onshape/')){
    const headers={'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
    if(request.method!=='GET')return new Response(JSON.stringify({error:'Method not allowed'}),{status:405,headers:{...headers,Allow:'GET'}});

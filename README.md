@@ -79,3 +79,13 @@ Old saved records and backups migrate on loading: Ready → Preparing; In progre
 ## Interface
 
 The header contains Parts, Production, and Materials. Shop mode opens the touch display. More contains Onshape import, CSV export, backup, and restore. The parts screen is a table; production is a five-lane board with compact active, blocked, and finished counts. Cards have one next-stage action, a Block/Unblock control, and a More menu for manual stage changes. The interface uses one stylesheet and system fonts.
+
+## COTS purchasing
+
+The COTS tab tracks purchased parts separately from manufactured parts and the BOM import. Record a vendor, vendor part number, product link, required quantity, ordered quantity, received quantity, delivery date, order/PO number, and notes. REV and WCP are suggested vendors; any vendor name is accepted. Status is derived from quantities and supports partial orders and deliveries. Mark ordered and Mark received update only the local tracker, and never place orders. CSV exports and JSON backups include COTS records; older backups load with an empty COTS list.
+
+Vendor summaries show all outstanding items, independent of table filters. WCP Add to cart resolves public product variants using the exact vendor SKU or the selected option in the product URL, then creates a multi-item cart permalink for the quantities still to order. Repeated variants are combined. If any item is missing a valid product link, has an ambiguous option, or is unavailable, no partial cart link is produced. The user opens the link and reviews the vendor cart. Cart links can change an existing WCP cart, and inventory limits are enforced by the vendor. Checkout remains on the vendor website.
+
+A supported bulk-cart link has not been verified for REV or other vendors. Their Order list action provides a copyable list and product links. Vendor cart actions do not mark parts as ordered.
+
+References: [Shopify cart permalinks](https://shopify.dev/docs/apps/build/checkout/create-cart-permalinks), [Shopify public product API](https://shopify.dev/docs/api/ajax/reference/product), and [WCP storefront](https://wcproducts.com/).
