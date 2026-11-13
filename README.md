@@ -29,6 +29,14 @@ Fullscreen and Keep awake are optional browser features. If unsupported, the app
 
 Shop mode uses the same browser-local workspace as the normal view. It does not sync with other team devices.
 
+### Starting and assigning work
+
+Parts are unassigned by default. Starting an unassigned part opens **Who are you?** with name buttons from existing records and a field for a new name. Selecting a name and confirming starts work and saves that worker. Cancel leaves the part unchanged. The same rule applies to status menus and changing status in the part editor.
+
+The optional **Advance assignment (admin, optional)** field preassigns a worker. Starting that part keeps the advance assignment and skips the name picker. Existing owner assignments are preserved when older workspaces or backups are loaded. Worker selections are separate from advance assignments, so restarting self-selected work asks who is starting it again. CSV exports include both the worker (`owner`) and advance assignment (`assignedTo`).
+
+This browser-local version does not authenticate users or enforce admin roles. The advance assignment field is an administrative workflow control; restricting it to actual admins requires accounts and permissions.
+
 ## Branding
 
 The palette uses yellow `#FFD400`, black, white, and deep navy. Yellow is taken from [the official Team 7028 stylesheet](https://www.7028robotics.com/style.css); navy reflects [the official Binary Battalion logo](https://www.7028robotics.com/images/7028-logo.png).
