@@ -4,7 +4,19 @@ import {cotsStatus,toOrder,validCots,wcpCartLink,selectWcpVariant,vendorName} fr
 import {normalizeAssignments,validWorkspace} from '../dist/model.js';
 import {mergeOnshapeParts} from '../dist/onshape-import.js';
 import {wcpProductData} from '../worker/vendors.js';
+import {vendorOrders,cotsTable} from '../dist/cots.js';
 const item={id:'cots-1',name:'Bearing',vendor:'WCP',number:'WCP-1234',needed:8,ordered:0,received:0,url:'https://wcproducts.com/products/bearings',eta:'',reference:'',notes:''};
+test('McMaster aliases share one vendor filter and order group without changing records',()=>{
+ const aliases=['McMaster Carr','McMaster-Carr','mcmaster carr','Mc Master','McMaster',' Mc Master - Carr '];
+ const items=aliases.map((vendor,n)=>({...item,id:String(n),vendor,ordered:n,received:n}));
+ const before=structuredClone(items);
+ assert.deepEqual([...new Set(items.map(i=>vendorName(i.vendor)))],['McMaster-Carr']);
+ assert.equal(items.filter(i=>vendorName(i.vendor)==='McMaster-Carr').length,aliases.length);
+ const orders=vendorOrders(items);assert.equal((orders.match(/data-vendor-cart=/g)||[]).length,1);
+ assert.match(orders,/6 items · 33 to order/);assert.match(orders,/data-vendor-cart="McMaster-Carr"/);
+ assert.equal((cotsTable(items).match(/<td>McMaster-Carr<\/td>/g)||[]).length,aliases.length);
+ assert.deepEqual(items,before);assert.equal(vendorName('McMaster Supplies'),'McMaster Supplies');
+});
 test('COTS order status and outstanding quantities reflect partial orders and deliveries',()=>{assert.equal(cotsStatus(item),'Need to order');assert.equal(toOrder(item),8);assert.equal(cotsStatus({...item,ordered:3}),'Part ordered');assert.equal(toOrder({...item,ordered:3}),5);assert.equal(cotsStatus({...item,ordered:8}),'Ordered');assert.equal(cotsStatus({...item,ordered:8,received:3}),'Part received');assert.equal(cotsStatus({...item,ordered:8,received:8}),'Received');assert.equal(toOrder({...item,ordered:10}),0);});
 test('COTS backups validate quantities, links, unique IDs and preserve older workspaces',()=>{const old={version:1,parts:[],materials:[]};assert.deepEqual(normalizeAssignments(old).cots,[]);assert.equal(validWorkspace({...old,cots:[item]}),true);assert.equal(validCots([item,item]),false);for(const delta of [{needed:0},{ordered:-1},{received:1},{url:'javascript:alert(1)'},{vendor:''},{received:1.5}])assert.equal(validCots([{...item,...delta}]),false);});
 test('BOM import preserves COTS records without merging or ordering them',()=>{const state={version:1,parts:[],materials:[],cots:[item]};const result=mergeOnshapeParts(state,[]);assert.deepEqual(result.workspace.cots,[item]);assert.equal(result.workspace.cots[0].ordered,0);});
