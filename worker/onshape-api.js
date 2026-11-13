@@ -24,7 +24,7 @@ export async function onshapeHeaders(url,env,{date=new Date().toUTCString(),nonc
 export async function readOnshapeParts(env,fetcher=fetch){
  const settings=onshapeSettings(env);if(!settings.configured)throw new Error('Onshape is not connected. Configure the API keys and source documents first.');
  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),45000);
- const parts=[];let ignored=0;
+ const parts=[],cots=[];let ignored=0;
  try{for(const source of settings.sources){
   // BOM-only read. Never scan documents, fetch part metadata, or generate a BOM.
   const url=new URL(`${source.origin}/api/v16/assemblies/d/${source.documentId}/${source.reference}/${source.referenceId}/e/${source.elementId}/bom`);
@@ -36,9 +36,9 @@ export async function readOnshapeParts(env,fetcher=fetch){
   while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>4_000_000){await reader.cancel();throw new Error('Onshape response is too large. Narrow the configured source.');}chunks.push(value);}
   const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
   let rows;try{rows=JSON.parse(new TextDecoder().decode(bytes));}catch{throw new Error('Onshape returned an invalid JSON response.');}
-  const mapped=mapOnshapeBom(rows,source);parts.push(...mapped.parts);ignored+=mapped.ignored;
-  if(parts.length>10000)throw new Error('Too many matching parts. Narrow the configured sources.');
- }return {parts,ignored,sourceCount:settings.sources.length,fetchedAt:new Date().toISOString()};}
+  const mapped=mapOnshapeBom(rows,source);parts.push(...mapped.parts);cots.push(...mapped.cots);ignored+=mapped.ignored;
+  if(parts.length+cots.length>10000)throw new Error('Too many matching parts. Narrow the configured sources.');
+ }return {parts,cots,ignored,sourceCount:settings.sources.length,fetchedAt:new Date().toISOString()};}
  catch(err){if(err.name==='AbortError')throw new Error('Onshape timed out. Try again later.');throw err;}
  finally{clearTimeout(timer);}
 }
