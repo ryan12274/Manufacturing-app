@@ -1,5 +1,7 @@
 node_modules/
 outputs/
+dist/server/
+dist/.openai/
 .DS_Store
 *.zip
 .env

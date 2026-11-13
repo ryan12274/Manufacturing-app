@@ -1,12 +1,13 @@
 # Team 7028 Manufacturing
 
-A responsive manufacturing workspace for FRC Team 7028. No package installation or build step required.
+A responsive manufacturing workspace for FRC Team 7028, with a server-side Onshape API integration. No package installation required.
 
 ## Run locally
 
 Use Node.js 20 or newer:
 
 ```sh
+node scripts/build-worker.mjs
 node scripts/serve.mjs
 ```
 
@@ -41,6 +42,25 @@ This browser-local version does not authenticate users or enforce admin roles. T
 
 The palette uses yellow `#FFD400`, black, white, and deep navy. Yellow is taken from [the official Team 7028 stylesheet](https://www.7028robotics.com/style.css); navy reflects [the official Binary Battalion logo](https://www.7028robotics.com/images/7028-logo.png).
 
+## Onshape API imports
+
+Open **Onshape import** in the regular workspace. The API connection is initially unconfigured. Add the following runtime settings through the private Site's environment settings when the team has Onshape access. Do not enter credentials into the smart board, commit them to GitHub, or place them in browser storage.
+
+- `ONSHAPE_ACCESS_KEY`: read-only Onshape API access key, stored as a secret.
+- `ONSHAPE_SECRET_KEY`: matching API secret key, stored as a secret.
+- `ONSHAPE_SOURCE_URLS`: JSON array of one to five Onshape document workspace/version or Part Studio URLs. Store as a secret when documents are private. A source URL has the shape `https://cad.onshape.com/documents/DOCUMENT_ID/w/WORKSPACE_ID`, optionally followed by `/e/ELEMENT_ID`. Versions and microversions can use `v` or `m` in place of `w`.
+- `ONSHAPE_BASE_URL`: optional server origin, default `https://cad.onshape.com`. Enterprise sources must use this same configured Onshape origin.
+
+For local development, copy `.env.example` to an ignored `.env`, set the values privately, build the Worker, and run `node --env-file=.env scripts/serve.mjs` with a Node version supporting `--env-file`. Redeploy the private Site after changing production runtime values.
+
+The server makes signed, read-only requests to Onshape's documented `GET /api/v16/parts/d/{documentId}/{wvm}/{referenceId}` endpoint, or its `/e/{elementId}` variant. It imports only explicit `partNumber` values beginning with `7028`. Names beginning with 7028 are not sufficient. Folder discovery, assembly BOM quantities, configured variants beyond the selected source configuration, and unattended background sync are outside this version's scope.
+
+**Find 7028 parts** previews matches. **Import / update parts** adds new part definitions with quantity 1, Not started status, and no worker assignment. Source identity is retained in JSON backups. Repeating an import does not duplicate parts. Later imports update CAD-owned name, part number, material, and CAD URL for linked records while preserving quantities, workers, advance assignments, status, process, subsystem, notes, and deadlines. Manual records with matching numbers and ambiguous numbers in Onshape are skipped and reported. No import deletes parts. Quantity must be set by the team, since this is not an assembly BOM import.
+
+Opt in to automatic import to add and update matching parts every five minutes while this display is open and visible. The preference is specific to the browser. Sync pauses while dialogs are open and never writes back to Onshape. Its results still belong to the browser-local workspace; other devices do not receive them automatically. Network failures leave the current workspace intact.
+
+Implemented against [Onshape's official API reference](https://github.com/onshape-public/go-client/blob/master/onshape/docs/PartApi.md) and [request-signature authentication guide](https://onshape-public.github.io/docs/auth/apikeys/). Live API verification requires the team's configured credentials and source documents. Automated tests use representative, mocked Onshape responses.
+
 ## Data storage
 
 Records are saved in localStorage in the current browser and website origin. This version does not provide accounts, shared team data, cloud synchronization, or file uploads. Separate devices and deployed/local versions have separate workspaces. Clearing browser data removes saved records. Use Backup regularly; CSV exports are for reporting and cannot be restored as a workspace. Concurrent editing in multiple tabs can overwrite changes.
@@ -49,4 +69,4 @@ Inventory is tracked manually. Completing a part does not deduct material automa
 
 ## Deployment
 
-Serve `dist/` on any static host. `.openai/hosting.json` identifies the private Sites preview. A shared database and member permissions are the next step for team-wide deployment.
+Run `node scripts/build-worker.mjs` to create the self-contained Cloudflare Worker at `dist/server/index.js`. It embeds the browser files and serves both the app and its Onshape read-only API routes. `.openai/hosting.json` identifies the private Site; keep its existing access policy. The Site's private authentication boundary protects the API. The browser assets can still be served statically, but Onshape API routes require the Worker. A shared database and member permissions are the next step for team-wide deployment.

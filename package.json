@@ -3,5 +3,5 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "node scripts/serve.mjs", "test": "node --test", "check": "node --check dist/app.js && node --check dist/model.js" }
+  "scripts": { "dev": "node scripts/serve.mjs", "build": "node scripts/build-worker.mjs", "test": "node --test", "check": "node --check dist/app.js && node --check dist/model.js && node --check worker/onshape-api.js" }
 }

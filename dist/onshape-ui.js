@@ -1,0 +1,23 @@
+import {mergeOnshapeParts} from './onshape-import.js';
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function initOnshape({getWorkspace,save,onChanged,toast}){
+ const $=s=>document.querySelector(s);let configured=false,busy=false,preview=null,automatic=false;
+ const report=message=>$('#onshape-message').textContent=message;
+ const setBusy=value=>{busy=value;$('#onshape-scan').disabled=value||!configured;$('#onshape-import').disabled=value||!preview;};
+ async function json(path){const response=await fetch(path,{cache:'no-store',headers:{Accept:'application/json'}});let data;try{data=await response.json();}catch{throw Error('The Onshape service is unavailable. Try again later.');}if(!response.ok)throw Error(data.error||'Onshape request failed.');return data;}
+ async function checkConnection(){try{const data=await json('/api/onshape/status');configured=data.configured;$('#onshape-connection').textContent=configured?'API configured':'Not connected';$('#onshape-connection').className=configured?'status complete':'status blocked';$('#onshape-auto').disabled=!configured;report(configured?`Ready to read ${data.sourceCount} configured source${data.sourceCount===1?'':'s'}.`:'The API connection is ready to configure. Add read-only Onshape API credentials and source documents in the server settings. No credentials are stored on this display.');}catch(err){report(err.message);configured=false;}setBusy(busy);return configured;}
+ function showSummary(result){report(`${result.added} new · ${result.updated} CAD updates · ${result.unchanged} unchanged · ${result.conflicts.length} conflicting part numbers`);}
+ function apply(data){const result=mergeOnshapeParts(getWorkspace(),data.parts);if(result.added||result.updated){if(!save(result.workspace))return null;onChanged();}return result;}
+ async function scan(auto=false){if(busy||!configured)return;setBusy(true);try{const data=await json('/api/onshape/parts');if(auto){const result=apply(data);if(result){showSummary(result);$('#onshape-last-sync').textContent='Last sync: '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});if(result.added||result.updated)toast(`Onshape: ${result.added} new parts, ${result.updated} CAD updates`);if(result.conflicts.length)toast('Onshape skipped conflicting part numbers. Review the import panel.');}return;}
+   preview=data;const result=mergeOnshapeParts(getWorkspace(),data.parts);showSummary(result);$('#onshape-results').innerHTML=data.parts.length?`<p>${data.ignored} parts skipped because their numbers do not start with 7028.</p><div class="onshape-list">${data.parts.map(p=>`<div><strong>${esc(p.number)}</strong><span>${esc(p.name)}</span></div>`).join('')}</div>${result.conflicts.length?`<p class="import-conflict">Skipped conflicts: ${result.conflicts.map(esc).join(', ')}. Each part number must identify one part; existing manual records are left unchanged.</p>`:''}`:'<p>No matching 7028 part numbers were found. Nothing will be changed.</p>';$('#onshape-import').hidden=!data.parts.length;
+  }catch(err){report(err.message);if(auto)toast('Onshape auto-import failed. Open Onshape import for details.');preview=null;}finally{setBusy(false);}}
+ $('#open-onshape').onclick=async()=>{$('#onshape-dialog').showModal();await checkConnection();};
+ $('#close-onshape').onclick=()=>$('#onshape-dialog').close();$('#onshape-scan').onclick=()=>scan();
+ $('#onshape-import').onclick=()=>{if(!preview)return;try{const result=apply(preview);if(!result)return;showSummary(result);$('#onshape-last-sync').textContent='Last sync: '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});toast(`Imported ${result.added} new parts; updated ${result.updated}`);preview=null;$('#onshape-import').hidden=true;}catch(err){report(err.message);}setBusy(false);};
+ $('#onshape-auto').onchange=async e=>{automatic=e.target.checked;try{localStorage.setItem('frc7028-onshape-auto',String(automatic));}catch{toast('Could not remember the auto-import preference.');}if(automatic){$('#onshape-dialog').close();await scan(true);}};
+ const timer=setInterval(()=>{if(automatic&&document.visibilityState==='visible'&&!document.querySelector('dialog[open]'))scan(true);},300000);
+ window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
+ // A prior opt-in is restored only after the server confirms configuration.
+ try{automatic=localStorage.getItem('frc7028-onshape-auto')==='true';}catch{}
+ if(automatic)checkConnection().then(ready=>{if(ready){$('#onshape-auto').checked=true;if(!document.querySelector('dialog[open]'))scan(true);}});
+}
