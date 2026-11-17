@@ -7,7 +7,7 @@ export default {
   if(url.pathname==='/api/vendors/wcp/product'){
    const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
    if(request.method!=='GET')return Response.json({error:'Method not allowed'},{status:405,headers});
-   try{return Response.json(await wcpProductData(url.searchParams.get('url')||''),{headers});}catch{return Response.json({error:'Could not resolve the WCP product. Check its link and part number.'},{status:400,headers});}
+   try{return Response.json(await wcpProductData(url.searchParams.get('url')||'',fetch,url.searchParams.get('number')||''),{headers});}catch(err){const error=/^(WCP |Use a WCP )/.test(err.message)?err.message:'Could not resolve the WCP product. Check its link and part number.';return Response.json({error},{status:400,headers});}
   }
   if(url.pathname.startsWith('/api/onshape/')){
    const headers={'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
