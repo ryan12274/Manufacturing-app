@@ -1,6 +1,6 @@
 // Public catalog reads only. No Onshape or customer credentials are sent to WCP.
 async function wcpJson(url,fetcher){
- let response;try{response=await fetcher(url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(12000),headers:{Accept:'application/json'}});}catch{throw Error('WCP catalog connection failed. Try again later.');}
+ let response;try{response=await fetcher(url,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(12000),headers:{Accept:'application/json'}});}catch(err){console.warn('WCP catalog fetch failed',err.name,err.message);throw Error('WCP catalog connection failed. Try again later.');}
  if(!response.ok)throw Error('WCP could not load this product. Check its link or part number (HTTP '+response.status+').');
  const body=await response.text();if(body.length>2_000_000)throw Error('WCP product response is too large.');try{return JSON.parse(body);}catch{console.warn('WCP catalog non-JSON response',new URL(url).pathname,response.status,response.headers.get('content-type'),body.slice(0,120));throw Error('WCP catalog returned a webpage instead of product data.');}
 }

@@ -6,7 +6,7 @@ import {wcpCartLink} from '../dist/cots-model.js';
 const item={id:'motor',name:'Motor',number:'WCP-0940',url:'',needed:6,ordered:2,received:1};
 const product=(sku='WCP-0940',available=true)=>({title:'Kraken X60',variants:[{id:123,sku,available}]});
 test('BOM SKU without a link resolves to an exact WCP variant using public GET only',async()=>{
- let calls=0;const data=await wcpProductData('',async(url,options)=>{calls++;assert.equal(url,'https://wcproducts.com/products/wcp-0940.js');assert.equal(options.method,'GET');assert.equal(options.redirect,'error');assert.ok(!options.headers.Authorization);return Response.json(product());},item.number);
+ let calls=0;const data=await wcpProductData('',async(url,options)=>{calls++;assert.equal(url,'https://wcproducts.com/products/wcp-0940.js');assert.equal(options.method,'GET');assert.equal(options.redirect,'manual');assert.ok(!options.headers.Authorization);return Response.json(product());},item.number);
  assert.equal(calls,1);assert.equal(data.number,item.number);assert.equal(data.variants[0].sku,item.number);assert.match(data.url,/wcp-0940$/);
 });
 test('search fallback verifies SKU and rejects kits that merely mention it',async()=>{
