@@ -1,6 +1,6 @@
-export const COTS_STATUSES=['Need to order','Part ordered','Ordered','Part received','Received'];
+export const COTS_STATUSES=['Not ordered','Partially ordered','Awaiting delivery','Partial delivery','Complete'];
 export const toOrder=item=>Math.max(0,item.needed-item.ordered);
-export function cotsStatus(item){if(item.received>=item.needed)return 'Received';if(item.received>0)return 'Part received';if(item.ordered>=item.needed)return 'Ordered';if(item.ordered>0)return 'Part ordered';return 'Need to order';}
+export function cotsStatus(item){if(item.received>=item.needed)return 'Complete';if(item.received>0)return 'Partial delivery';if(item.ordered>=item.needed)return 'Awaiting delivery';if(item.ordered>0)return 'Partially ordered';return 'Not ordered';}
 export function validCots(items){return Array.isArray(items)&&new Set(items.map(i=>i?.id)).size===items.length&&items.every(i=>i&&['id','name','vendor','number','url','eta','reference','notes'].every(k=>typeof i[k]==='string'&&i[k].length<=10000)&&i.id&&i.name.trim()&&i.vendor.trim()&&['needed','ordered','received'].every(k=>Number.isSafeInteger(i[k])&&i[k]>=0)&&i.needed>0&&i.received<=i.ordered&&(!i.url||safeProductUrl(i.url))&&(!i.eta||/^\d{4}-\d{2}-\d{2}$/.test(i.eta)&&!Number.isNaN(Date.parse(i.eta))));}
 export function safeProductUrl(value){try{const u=new URL(value);return ['https:','http:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'';}catch{return '';}}
 export function vendorName(value){const v=value.trim();if(/^mc\s*master(?:[\s-]*carr)?$/i.test(v))return 'McMaster-Carr';if(/^rev(?: robotics)?$/i.test(v))return 'REV';if(/^(wcp|westcoast products)$/i.test(v))return 'WCP';return v;}

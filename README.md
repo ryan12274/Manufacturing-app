@@ -20,7 +20,7 @@ Open http://127.0.0.1:7028. To validate, run `node --test`, `node --check dist/a
 - Search and filter the register. Export the current filtered view as CSV.
 - Check manufacturing readiness and track finished pieces within each batch.
 - Download a JSON backup and restore a validated backup.
-- Explore labeled sample data or use Start empty to clear the sample workspace.
+- Start with a clean workspace; old seeded examples and exact test records migrate out with a backup.
 
 ## Shop mode
 
@@ -97,3 +97,11 @@ Navigation includes Parts, Production, and COTS. Materials is hidden from both r
 Production reports finished pieces against required pieces, plus completed batches, active jobs, readiness, and blocked counts. Finishing supports recording one piece at a time or explicitly finishing the remaining batch. Recent stage and quantity activity is retained for each part, limited to 50 entries. Existing finished jobs migrate with their entire quantity complete. Reopening a finished batch starts a new run at zero.
 
 Small screens use record cards and stacked production lanes; tablets use multiple lanes, and the shop board retains five lanes and large touch controls on wide displays.
+
+## Workspace cleanup and alerts
+
+Unfinished jobs past their due date show an explicit Overdue badge, days late, a red date, and an Overdue filter. Finished and due-today jobs are not overdue. The display refreshes date-based alerts when the calendar day changes. Cutting/Finishing jobs with missing readiness checks show a Readiness exception instead of silently being considered ready. The summary and filters distinguish these from the queue ready to start cutting. Checks and stages are not automatically approved or reset.
+
+The cleanup migration removes seeded demo records and two exact confirmed test signatures, clears the sadf subsystem, and preserves real CAD parts, shop progress, workers, and all COTS quantities. It saves the original workspace to a separate browser-local backup before making changes, available from More > Backup before cleanup. If the backup cannot be saved, cleanup is skipped. New visitors start empty.
+
+COTS statuses are Not ordered, Partially ordered, Awaiting delivery, Partial delivery, and Complete. Empty searches say No matching COTS parts and offer a Clear search and filters action. A genuinely empty purchasing list instead offers importing or adding purchased parts.

@@ -1,5 +1,12 @@
 export const READINESS_CHECKS=[['drawingReviewed','Drawing / dimensions reviewed'],['materialReady','Material available'],['setupReady','Tools and setup ready']];
 export const completedQuantity=p=>p.completedQty??(p.status==='Finished'?p.quantity:0);
+export function localDateKey(date=new Date()){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
+export function overdueDays(part,today=localDateKey()){
+ if(part.status==='Finished'||!part.due||part.due>=today)return 0;
+ return Math.max(0,Math.round((Date.parse(today+'T00:00:00Z')-Date.parse(part.due+'T00:00:00Z'))/86400000))||0;
+}
+export const readinessException=p=>['Cutting','Finishing'].includes(p.status)&&readinessIssues({...p,blocked:false}).length>0;
+export const readyToStartCutting=p=>['Not started','Preparing'].includes(p.status)&&readinessIssues(p).length===0;
 export function readinessIssues(p){
  const issues=[];
  if(p.blocked)issues.push('Remove the blocked tag after resolving the issue.');
@@ -34,5 +41,5 @@ export function recordCompletion(part,quantity,now){
 }
 export function productionSummary(parts){
  const total=parts.reduce((n,p)=>n+p.quantity,0),finished=parts.reduce((n,p)=>n+completedQuantity(p),0);
- return {total,finished,percent:total?Math.round(finished/total*100):0,active:parts.filter(p=>['Preparing','Cutting','Finishing'].includes(p.status)).length,blocked:parts.filter(p=>p.blocked&&p.status!=='Finished').length,ready:parts.filter(p=>['Not started','Preparing'].includes(p.status)&&!readinessIssues(p).length).length,jobsFinished:parts.filter(p=>p.status==='Finished').length};
+ return {total,finished,percent:total?Math.round(finished/total*100):0,active:parts.filter(p=>['Preparing','Cutting','Finishing'].includes(p.status)).length,blocked:parts.filter(p=>p.blocked&&p.status!=='Finished').length,ready:parts.filter(readyToStartCutting).length,exceptions:parts.filter(readinessException).length,overdue:parts.filter(p=>overdueDays(p)>0).length,jobsFinished:parts.filter(p=>p.status==='Finished').length};
 }
