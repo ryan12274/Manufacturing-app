@@ -18,13 +18,13 @@ Open http://127.0.0.1:7028. To validate, run `node --test`, `node --check dist/a
 - Create, edit, and delete part records with quantities, subsystems, materials, manufacturing processes, owners, deadlines, priorities, CAD links, and shop notes.
 - Follow parts through Not started, Preparing, Cutting, Finishing, and Finished on the production board.
 - Search and filter the register. Export the current filtered view as CSV.
-- Track material stock, storage locations, units, and reorder thresholds.
+- Check manufacturing readiness and track finished pieces within each batch.
 - Download a JSON backup and restore a validated backup.
 - Explore labeled sample data or use Start empty to clear the sample workspace.
 
 ## Shop mode
 
-Select **Shop mode** to use a display-friendly production board. Bookmark the app with `?shop=1` to open directly in shop mode. The five manufacturing-stage lanes show large part cards, assigned owners, quantities, manufacturing processes, deadlines, and blocker notes. Start preparing or move a part to its next stage with the large action buttons. Status menus allow other transitions. Materials switches to a large inventory view; Exit shop mode returns to the regular workspace.
+Select **Shop mode** to use a display-friendly production board. Bookmark the app with `?shop=1` to open directly in shop mode. The five manufacturing-stage lanes show large part cards, assigned owners, quantities, manufacturing processes, deadlines, and blocker notes. Start preparing or move a part to its next stage with the large action buttons. Status menus allow other transitions. COTS switches to purchasing; Exit shop mode returns to the regular workspace.
 
 Fullscreen and Keep awake are optional browser features. If unsupported, the app shows a message and remains usable. Wake lock is requested only after tapping Keep awake and released on leaving shop mode. On smaller displays the lanes wrap; long columns scroll by touch. At 1920-pixel width all five lanes appear side by side.
 
@@ -52,7 +52,7 @@ Runtime configuration is held in the private Site settings:
 - ONSHAPE_SOURCE_URLS: a JSON array containing the explicitly approved assembly URL, including its document, workspace/version, and element IDs. The currently authorized source is the assembly link supplied by the owner. Source URLs are stored as secrets.
 - ONSHAPE_BASE_URL: optional Onshape origin, default https://cad.onshape.com.
 
-The flattened BOM supplies part number, name, material, CAD link, and quantity. Leaf-part rows whose Part number begins with 7028 import into Parts. Other numbered leaf parts import into COTS, as do unnumbered rows with an explicit vendor or Onshape standard-content flag. Unnumbered custom rows without purchasing details are skipped. COTS quantities for the same vendor and SKU in one BOM are combined. REV, WCP, and AndyMark SKU prefixes supply the vendor when the BOM vendor is blank; other missing vendors appear as Unassigned. COTS sync preserves supplier corrections, product links, ordered/received quantities, delivery dates, PO numbers, and notes. Manual vendor/SKU collisions are skipped for review. Subassemblies and excluded rows are skipped. Quantities must be positive whole counts. Repeated imports update linked records' BOM-owned details and quantity while preserving workers, preassignments, stage, blocked tag, notes, processes, subsystem, and deadlines. No part is deleted automatically. Conflicting part numbers are skipped and shown in the import panel.
+The flattened BOM supplies part number, name, material, CAD link, and quantity. Leaf-part rows whose Part number begins with 7028 import into Parts. Other numbered leaf parts import into COTS, as do unnumbered rows with an explicit vendor or Onshape standard-content flag. Unnumbered custom rows without purchasing details are skipped. COTS quantities for the same vendor and SKU in one BOM are combined. REV, WCP, and AndyMark SKU prefixes supply the vendor when the BOM vendor is blank; other missing vendors appear as Unassigned. COTS sync preserves supplier corrections, product links, ordered/received quantities, delivery dates, PO numbers, and notes. Manual vendor/SKU collisions are skipped for review. Subassemblies and excluded rows are skipped. Quantities must be positive whole counts. Repeated imports update linked records' BOM-owned details and quantity while preserving workers, preassignments, stage, blocked tag, notes, processes, subsystem, and deadlines. No part is deleted automatically. Distinct CAD identities sharing a part number import as separate jobs. Manual number collisions appear in the import panel with Link tracked record and Keep separate actions. Linking preserves shop progress. BOM quantities below recorded completion are held for review. Drawing/material/quantity changes invalidate affected readiness checks; completed pieces are preserved.
 
 Automatic import runs every five minutes while the app is open and visible, after being enabled in this browser. Shop progress and imported records are still stored on this device. The app does not sync local workspaces between devices or run imports while closed.
 
@@ -89,3 +89,11 @@ Vendor summaries show all outstanding items, independent of table filters. WCP A
 A supported bulk-cart link has not been verified for REV or other vendors. Their Order list action provides a copyable list and product links. Vendor cart actions do not mark parts as ordered.
 
 References: [Shopify cart permalinks](https://shopify.dev/docs/apps/build/checkout/create-cart-permalinks), [Shopify public product API](https://shopify.dev/docs/api/ajax/reference/product), and [WCP storefront](https://wcproducts.com/).
+
+## Manufacturing readiness and batch progress
+
+Navigation includes Parts, Production, and COTS. Materials is hidden from both regular and shop navigation; existing material records remain in backups. Before cutting or finishing, each part needs its number, material, process, and confirmations for drawing/dimensions review, material availability, and tool/setup readiness. Blocked jobs cannot advance. Workers are selected when starting work unless preassigned. Preparing can begin before readiness is complete.
+
+Production reports finished pieces against required pieces, plus completed batches, active jobs, readiness, and blocked counts. Finishing supports recording one piece at a time or explicitly finishing the remaining batch. Recent stage and quantity activity is retained for each part, limited to 50 entries. Existing finished jobs migrate with their entire quantity complete. Reopening a finished batch starts a new run at zero.
+
+Small screens use record cards and stacked production lanes; tablets use multiple lanes, and the shop board retains five lanes and large touch controls on wide displays.

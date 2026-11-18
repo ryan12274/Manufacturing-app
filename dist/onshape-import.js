@@ -52,7 +52,7 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
   if(keys.has(p.key)&&JSON.stringify(keys.get(p.key))!==JSON.stringify(p))throw new Error('Conflicting COTS BOM identities.');
   keys.set(p.key,p);
  }
- const cots=(workspace.cots||[]).map(i=>({...i}));let added=0,updated=0,unchanged=0;const conflicts=[];
+ const cots=(workspace.cots||[]).map(i=>({...i}));let added=0,updated=0,unchanged=0;const conflicts=[],conflictDetails=[];
  for(const p of keys.values()){
   let matches=cots.filter(i=>i.onshape?.key===p.key);
   // Retain order progress from the first release's placeholder-SKU identities.
@@ -61,7 +61,7 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
    try{const old=JSON.parse(i.onshape?.key);const key=JSON.parse(p.key);return old[0]==='bom-cots'&&key[0]==='bom'&&old.slice(1,7).every((v,n)=>v===key[n+1]);}catch{return false;}
   });
   const collisions=usableBomValue(p.number)?cots.filter(i=>i.number.trim()===p.number&&bomVendor(i.vendor,i.number)===p.vendor&&!i.onshape):[];
-  if(matches.length>1||collisions.length){conflicts.push(p.number||p.name);continue;}
+  if(matches.length>1||(!matches.length&&collisions.length)){conflicts.push(p.number||p.name);conflictDetails.push({kind:'cots',part:p,existingIds:(matches.length?matches:collisions).map(i=>i.id)});continue;}
   const existing=matches[0];
   if(existing){
    // Supplier corrections and purchasing progress belong to the shop.
@@ -69,13 +69,13 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
    if(changed){Object.assign(existing,{name:p.name,number:p.number,needed:p.quantity,onshape:{...existing.onshape,key:p.key}});updated++;}else unchanged++;
   }else{cots.push({id:idFactory(),name:p.name,number:p.number,vendor:p.vendor,needed:p.quantity,ordered:0,received:0,url:'',eta:'',reference:'',notes:'',onshape:{key:p.key,mode:'bom'}});added++;}
  }
- return {workspace:{...workspace,cots},added,updated,unchanged,conflicts:[...new Set(conflicts)]};
+ return {workspace:{...workspace,cots},added,updated,unchanged,conflicts:[...new Set(conflicts)],conflictDetails};
 }
 
 export function mergeOnshapeBom(workspace,data,idFactory){
  const manufactured=mergeOnshapeParts(workspace,data.parts,idFactory);
  const purchased=mergeOnshapeCots(manufactured.workspace,data.cots||[],idFactory);
- return {workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts]};
+ return {workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts],conflictDetails:[...manufactured.conflictDetails,...purchased.conflictDetails],sharedNumbers:manufactured.sharedNumbers};
 }
 
 export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.randomUUID()){
@@ -88,15 +88,38 @@ export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.random
   sourceKeys.set(p.key,p);
   if(!numbers.has(p.number))numbers.set(p.number,new Set());numbers.get(p.number).add(p.key);
  }
- const parts=workspace.parts.map(p=>({...p}));let added=0,updated=0,unchanged=0;const conflicts=[];
+ const parts=workspace.parts.map(p=>({...p}));let added=0,updated=0,unchanged=0;const conflicts=[],conflictDetails=[];
  for(const p of sourceKeys.values()){
-  if(numbers.get(p.number).size>1){conflicts.push(p.number);continue;}
   const identityMatches=parts.filter(r=>r.onshape?.key===p.key);
   const sameNumber=parts.filter(r=>r.number.trim()===p.number);
-  if(identityMatches.length>1||sameNumber.some(r=>r!==identityMatches[0])){conflicts.push(p.number);continue;}
+  const manual=sameNumber.filter(r=>!r.onshape);if(identityMatches.length>1||(!identityMatches.length&&manual.length)){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:(identityMatches.length?identityMatches:manual).map(i=>i.id)});continue;}
   const existing=identityMatches[0];
-  if(existing){const changed=['name','number','material','cad','quantity'].some(k=>existing[k]!==p[k]);if(changed){Object.assign(existing,{name:p.name,number:p.number,material:p.material,cad:p.cad,quantity:p.quantity});updated++;}else unchanged++;}
-  else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key,mode:'bom'},subsystem:'',process:'',quantity:p.quantity,owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:''});added++;}
+  if(existing){
+   const completed=existing.completedQty??(existing.status==='Finished'?existing.quantity:0);
+   if(p.quantity<completed){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:[existing.id],reason:'BOM quantity is below the recorded finished quantity. Correct the finished count first.'});continue;}
+   const changed=['name','number','material','cad','quantity'].some(k=>existing[k]!==p[k]);
+   if(changed){const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};if(['name','number','cad'].some(k=>existing[k]!==p[k]))readiness.drawingReviewed=false;if(['material','quantity'].some(k=>existing[k]!==p[k])){readiness.materialReady=false;readiness.setupReady=false;}const status=existing.status==='Finished'&&p.quantity>completed?'Finishing':existing.status;Object.assign(existing,{name:p.name,number:p.number,material:p.material,cad:p.cad,quantity:p.quantity,completedQty:completed,readiness,status});updated++;}else unchanged++;
+  }else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key,mode:'bom'},subsystem:'',process:'',quantity:p.quantity,completedQty:0,readiness:{drawingReviewed:false,materialReady:false,setupReady:false},owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:''});added++;}
  }
- return {workspace:{...workspace,parts},added,updated,unchanged,conflicts:[...new Set(conflicts)]};
+ return {workspace:{...workspace,parts},added,updated,unchanged,conflicts:[...new Set(conflicts)],conflictDetails,sharedNumbers:[...numbers].filter(([,keys])=>keys.size>1).map(([number])=>number)};
+}
+
+export function resolveBomConflict(workspace,detail,existingId='',idFactory=()=>crypto.randomUUID()){
+ const kind=detail.kind,part=detail.part;if(!['parts','cots'].includes(kind))throw Error('Invalid import conflict.');
+ let next=workspace;
+ if(existingId){
+  const current=(workspace[kind]||[]).find(i=>i.id===existingId);
+  if(!current||!detail.existingIds.includes(existingId))throw Error('This tracked record changed. Scan the BOM again.');
+  if(current.onshape?.key&&current.onshape.key!==part.key)throw Error('This record is already linked to another BOM item. Keep them separate.');
+  next={...workspace,[kind]:workspace[kind].map(i=>{if(i.id===existingId)return {...i,onshape:{key:part.key,mode:'bom'}};if(i.onshape?.key===part.key){const copy={...i};delete copy.onshape;return copy;}return i;})};
+ }
+ // A separate record is explicitly linked first, so manual number collisions cannot
+ // cause the same unresolved conflict on subsequent syncs.
+ if(!existingId){
+  const base=kind==='parts'?{id:idFactory(),...part,quantity:part.quantity,completedQty:0,subsystem:'',process:'',owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:'',readiness:{drawingReviewed:false,materialReady:false,setupReady:false}}:{id:idFactory(),name:part.name,number:part.number,vendor:part.vendor,needed:part.quantity,ordered:0,received:0,url:'',eta:'',reference:'',notes:''};
+  delete base.key;next={...workspace,[kind]:[...(workspace[kind]||[]),{...base,onshape:{key:part.key,mode:'bom'}}]};
+ }
+ const result=kind==='parts'?mergeOnshapeParts(next,[part],idFactory):mergeOnshapeCots(next,[part],idFactory);
+ if(result.conflicts.length)throw Error(detail.reason||'This conflict needs a correction in the tracked record first.');
+ return result.workspace;
 }
