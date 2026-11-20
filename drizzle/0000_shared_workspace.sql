@@ -1,0 +1,1 @@
+CREATE TABLE workspace_state (id TEXT PRIMARY KEY NOT NULL, state_json TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0);

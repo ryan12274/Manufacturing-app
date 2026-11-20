@@ -1,9 +1,11 @@
+import {workspaceApi} from './workspace-api.js';
 import {onshapeSettings,readOnshapeParts} from './onshape-api.js';
 import {wcpProductData} from './vendors.js';
 // The build embeds the existing browser files into this module as STATIC_FILES.
 export default {
  async fetch(request,env){
   const url=new URL(request.url);
+  if(['/api/session','/api/workspace','/api/reviews'].includes(url.pathname)){try{return await workspaceApi(request,env);}catch{return Response.json({error:'Shared workspace service unavailable.'},{status:503,headers:{'Cache-Control':'no-store'}});}}
   if(url.pathname==='/api/vendors/wcp/product'){
    const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
    if(request.method!=='GET')return Response.json({error:'Method not allowed'},{status:405,headers});

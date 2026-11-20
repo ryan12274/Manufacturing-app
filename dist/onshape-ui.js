@@ -1,6 +1,6 @@
 import {mergeOnshapeBom,resolveBomConflict} from './onshape-import.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export function initOnshape({getWorkspace,save,onChanged,toast}){
+export function initOnshape({getWorkspace,save,onChanged,toast,enabled=()=>true}){
  const $=s=>document.querySelector(s);let configured=false,busy=false,preview=null,automatic=false,lastData=null,lastConflicts=[];
  const report=message=>$('#onshape-message').textContent=message;
  const setBusy=value=>{busy=value;$('#onshape-scan').disabled=value||!configured;$('#onshape-import').disabled=value||!preview;};
@@ -15,7 +15,7 @@ export function initOnshape({getWorkspace,save,onChanged,toast}){
  }
  $('#onshape-conflicts').onclick=e=>{const b=e.target.closest('[data-resolve]');if(!b||!lastData)return;try{let workspace=resolveBomConflict(getWorkspace(),lastConflicts[Number(b.dataset.resolve)],b.dataset.existing||'');const result=mergeOnshapeBom(workspace,lastData);if(save(result.workspace)){onChanged();showSummary(result);toast('Import conflict resolved');}}catch(err){report(err.message);}};
  function apply(data){const result=mergeOnshapeBom(getWorkspace(),data);if(result.added||result.updated){if(!save(result.workspace))return null;onChanged();}return result;}
- async function scan(auto=false){if(busy||!configured)return;setBusy(true);try{const data=await json('/api/onshape/parts');lastData=data;if(auto){const result=apply(data);if(result){showSummary(result);$('#onshape-last-sync').textContent='Last sync: '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});if(result.added||result.updated)toast(`Onshape: ${result.added} new items, ${result.updated} BOM updates`);if(result.conflicts.length)toast('Onshape skipped conflicting part numbers. Review the import panel.');}return;}
+ async function scan(auto=false){if(!enabled()){report('Choose a BOM destination in Admin before importing.');return;}if(busy||!configured)return;setBusy(true);try{const data=await json('/api/onshape/parts');lastData=data;if(auto){const result=apply(data);if(result){showSummary(result);$('#onshape-last-sync').textContent='Last sync: '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});if(result.added||result.updated)toast(`Onshape: ${result.added} new items, ${result.updated} BOM updates`);if(result.conflicts.length)toast('Onshape skipped conflicting part numbers. Review the import panel.');}return;}
    preview=data;const result=mergeOnshapeBom(getWorkspace(),data);showSummary(result);const purchased=data.cots||[];$('#onshape-results').innerHTML=`<p>${data.parts.length} manufacturing parts · ${purchased.length} COTS items · ${data.ignored} rows skipped (assemblies, excluded or missing part details).</p><div class="onshape-list">${[...data.parts.map(p=>({...p,label:p.number})),...purchased.map(p=>({...p,label:'COTS · '+p.vendor+' · '+(p.number||'No part number')}))].map(p=>`<div><strong>${esc(p.label)}</strong><span>${esc(p.name)} · Qty ${p.quantity}</span></div>`).join('')}</div>`;$('#onshape-import').hidden=!(data.parts.length+purchased.length);
 
   }catch(err){report(err.message);if(auto)toast('Onshape auto-import failed. Open Onshape import for details.');preview=null;}finally{setBusy(false);}}

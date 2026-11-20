@@ -28,7 +28,7 @@ Select **Shop mode** to use a display-friendly production board. Bookmark the ap
 
 Fullscreen and Keep awake are optional browser features. If unsupported, the app shows a message and remains usable. Wake lock is requested only after tapping Keep awake and released on leaving shop mode. On smaller displays the lanes wrap; long columns scroll by touch. At 1920-pixel width all five lanes appear side by side.
 
-Shop mode uses the same browser-local workspace as the normal view. It does not sync with other team devices.
+Shop mode and normal mode use the same shared team workspace. Changes sync through authenticated server storage; devices poll for updates while no editor is open.
 
 ### Starting and assigning work
 
@@ -36,7 +36,7 @@ Parts are unassigned by default. Starting an unassigned part opens **Who’s wor
 
 The optional **Preassigned worker (optional)** field preassigns a worker. Starting that part keeps the advance assignment and skips the name picker. Existing owner assignments are preserved when older workspaces or backups are loaded. Worker selections are separate from advance assignments, so restarting self-selected work asks who is starting it again. CSV exports include both the worker (`owner`) and advance assignment (`assignedTo`).
 
-This browser-local version does not authenticate users or enforce admin roles. The advance assignment field is an administrative workflow control; restricting it to actual admins requires accounts and permissions.
+Sites provides sign-in. ADMIN_EMAILS identifies the administrators, and the server authorizes project/student management, part details, advance assignments, and reviews. A name in the worker picker does not grant admin access.
 
 ## Branding
 
@@ -105,3 +105,13 @@ Unfinished jobs past their due date show an explicit Overdue badge, days late, a
 The cleanup migration removes seeded demo records and two exact confirmed test signatures, clears the sadf subsystem, and preserves real CAD parts, shop progress, workers, and all COTS quantities. It saves the original workspace to a separate browser-local backup before making changes, available from More > Backup before cleanup. If the backup cannot be saved, cleanup is skipped. New visitors start empty.
 
 COTS statuses are Not ordered, Partially ordered, Awaiting delivery, Partial delivery, and Complete. Empty searches say No matching COTS parts and offer a Clear search and filters action. A genuinely empty purchasing list instead offers importing or adding purchased parts.
+
+## Projects, students, and review queue
+
+Projects separates Robot 1, Robot 2, and Robot Cart. Legacy records migrate into Robot 1. Only admins create, rename, remove, or restore projects. Removal archives records instead of deleting them. The approved Onshape BOM stays bound to Robot 1 unless an admin explicitly changes its destination; another project never receives it just because it is selected. No additional Onshape documents are read.
+
+Admin contains student roster management, project/BOM settings, full part details and assignments, and a review queue. Removed students disappear from new work choices, unfinished advance assignments clear, and past work remains. Roster management does not change the Site sharing audience or send invitations.
+
+Shop members use a focused work dialog for readiness, blockers, notes, and quantity progress. Find next job respects advance assignments, blocked jobs, readiness, priority, and deadlines. My work and preparation filters reduce board scanning. Finishing a batch submits it to the review queue; there is no time-specific review schedule. Admins approve selected batches or return them to Finishing with a required reason. Reviewer identity and review events are stored server-side, and approval is invalidated if the manufactured batch changes.
+
+Shared state lives in the DB D1 binding, with schema-only migrations in drizzle/. Revision checks reject stale writes. Existing browser data is backed up before migration; failed writes retain a local recovery snapshot. Browser storage now caches data and preferences rather than acting as the authority for permissions. Local preview uses a separate SQLite database in ignored outputs/ and a local-only development admin identity.

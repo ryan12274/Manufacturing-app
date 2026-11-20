@@ -1,10 +1,11 @@
+import {normalizeProjects,validProjects} from './projects.js';
 import {validCots} from './cots-model.js';
 export const STATUSES = ['Not started', 'Preparing', 'Cutting', 'Finishing', 'Finished'];
 const LEGACY_STATUSES=['Ready','In progress','Blocked','Complete'];
 export const STORAGE_KEY = 'frc7028-workshop-v1';
 export function normalizeAssignments(workspace) {
   const stages={Ready:'Preparing','In progress':'Cutting',Blocked:'Preparing',Complete:'Finished'};
-  return {...workspace,cots:workspace.cots??[],parts:workspace.parts.map(p=>({...p,status:stages[p.status]||p.status,blocked:p.status==='Blocked'||p.blocked===true,assignedTo:p.assignedTo??p.owner,completedQty:p.completedQty??(['Complete','Finished'].includes(p.status)?p.quantity:0),readiness:p.readiness??{drawingReviewed:false,materialReady:false,setupReady:false}}))};
+  return normalizeProjects({...workspace,cots:workspace.cots??[],parts:workspace.parts.map(p=>({...p,status:stages[p.status]||p.status,blocked:p.status==='Blocked'||p.blocked===true,assignedTo:p.assignedTo??p.owner,completedQty:p.completedQty??(['Complete','Finished'].includes(p.status)?p.quantity:0),readiness:p.readiness??{drawingReviewed:false,materialReady:false,setupReady:false}}))});
 }
 export function needsWorkerSelection(part,target){
   return ['Preparing','Cutting','Finishing'].includes(target)&&(part.status==='Not started'||part.status==='Finished'||!part.owner.trim());
@@ -17,6 +18,7 @@ export function startPart(part, worker='',target='Preparing') {
 }
 export function validWorkspace(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.parts) || !Array.isArray(data.materials)) return false;
+  if(!validProjects(data))return false;
   if(data.cots!==undefined&&!validCots(data.cots))return false;
   if(data.parts.some(p=>p&&((p.completedQty!==undefined&&(!Number.isSafeInteger(p.completedQty)||p.completedQty<0||p.completedQty>p.quantity))||(p.readiness!==undefined&&(!p.readiness||typeof p.readiness!=='object'||Array.isArray(p.readiness)||!['drawingReviewed','materialReady','setupReady'].every(k=>typeof p.readiness[k]==='boolean')))||(p.history!==undefined&&(!Array.isArray(p.history)||p.history.length>50||!p.history.every(h=>h&&typeof h.at==='string'&&!Number.isNaN(Date.parse(h.at))&&typeof h.label==='string'&&h.label.length<=500&&typeof h.worker==='string'&&h.worker.length<=500))))))return false;
   const textFields = (row, fields) => fields.every(field => typeof row[field] === 'string' && row[field].length <= 10000);
