@@ -65,8 +65,8 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
   const existing=matches[0];
   if(existing){
    // Supplier corrections and purchasing progress belong to the shop.
-   const changed=existing.name!==p.name||existing.number!==p.number||existing.needed!==p.quantity||existing.onshape.key!==p.key;
-   if(changed){Object.assign(existing,{name:p.name,number:p.number,needed:p.quantity,onshape:{...existing.onshape,key:p.key}});updated++;}else unchanged++;
+   const changed=existing.name!==p.name||existing.number!==p.number||existing.needed!==p.quantity||existing.onshape.key!==p.key||existing.sourceMissing;
+   if(changed){Object.assign(existing,{name:p.name,number:p.number,needed:p.quantity,sourceMissing:false,onshape:{...existing.onshape,key:p.key}});updated++;}else unchanged++;
   }else{cots.push({id:idFactory(),name:p.name,number:p.number,vendor:p.vendor,needed:p.quantity,ordered:0,received:0,url:'',eta:'',reference:'',notes:'',onshape:{key:p.key,mode:'bom'}});added++;}
  }
  return {workspace:{...workspace,cots},added,updated,unchanged,conflicts:[...new Set(conflicts)],conflictDetails};
@@ -75,7 +75,8 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
 export function mergeOnshapeBom(workspace,data,idFactory){
  const manufactured=mergeOnshapeParts(workspace,data.parts,idFactory);
  const purchased=mergeOnshapeCots(manufactured.workspace,data.cots||[],idFactory);
- return {workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts],conflictDetails:[...manufactured.conflictDetails,...purchased.conflictDetails],sharedNumbers:manufactured.sharedNumbers};
+ const incoming=new Set([...(data.parts||[]),...(data.cots||[])].map(p=>p.key));const preview=[];for(const kind of ['parts','cots'])for(const item of purchased.workspace[kind]){if(item.onshape?.key&&!incoming.has(item.onshape.key)){item.sourceMissing=true;preview.push({id:item.id,name:item.name,change:'No longer in BOM; retained for review'});}const old=(workspace[kind]||[]).find(p=>p.id===item.id);if(!old)preview.push({id:item.id,name:item.name,change:'New record'});else{const fields=(kind==='parts'?['name','number','material','quantity']:['name','number','needed']).filter(k=>old[k]!==item[k]);if(fields.length)preview.push({id:item.id,name:item.name,change:fields.map(k=>k+': '+old[k]+' → '+item[k]).join(', ')});}if(kind==='parts'&&(!item.material||!item.process))preview.push({id:item.id,name:item.name,change:'Missing material or process; requires shop setup'});}
+ return {preview,workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts],conflictDetails:[...manufactured.conflictDetails,...purchased.conflictDetails],sharedNumbers:manufactured.sharedNumbers};
 }
 
 export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.randomUUID()){
@@ -97,8 +98,8 @@ export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.random
   if(existing){
    const completed=existing.completedQty??(existing.status==='Finished'?existing.quantity:0);
    if(p.quantity<completed){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:[existing.id],reason:'BOM quantity is below the recorded finished quantity. Correct the finished count first.'});continue;}
-   const changed=['name','number','material','cad','quantity'].some(k=>existing[k]!==p[k]);
-   if(changed){const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};if(['name','number','cad'].some(k=>existing[k]!==p[k]))readiness.drawingReviewed=false;if(['material','quantity'].some(k=>existing[k]!==p[k])){readiness.materialReady=false;readiness.setupReady=false;}const status=existing.status==='Finished'&&p.quantity>completed?'Finishing':existing.status;Object.assign(existing,{name:p.name,number:p.number,material:p.material,cad:p.cad,quantity:p.quantity,completedQty:completed,readiness,status});updated++;}else unchanged++;
+   const sourceFields=existing.localOverride?['quantity']:['name','number','material','cad','quantity'];const changed=sourceFields.some(k=>existing[k]!==p[k])||existing.sourceMissing;
+   if(changed){const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};if(['name','number','cad'].some(k=>existing[k]!==p[k]))readiness.drawingReviewed=false;if(['material','quantity'].some(k=>existing[k]!==p[k])){readiness.materialReady=false;readiness.setupReady=false;}const status=existing.status==='Finished'&&p.quantity>completed?'Finishing':existing.status;Object.assign(existing,{...Object.fromEntries(sourceFields.map(k=>[k,p[k]])),sourceMissing:false,completedQty:completed,readiness,status});updated++;}else unchanged++;
   }else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key,mode:'bom'},subsystem:'',process:'',quantity:p.quantity,completedQty:0,readiness:{drawingReviewed:false,materialReady:false,setupReady:false},owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:''});added++;}
  }
  return {workspace:{...workspace,parts},added,updated,unchanged,conflicts:[...new Set(conflicts)],conflictDetails,sharedNumbers:[...numbers].filter(([,keys])=>keys.size>1).map(([number])=>number)};

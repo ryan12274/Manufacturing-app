@@ -13,8 +13,8 @@ test('readiness gates cutting even with an assigned worker; preparing stays avai
 test('partial batch completion is counted by pieces and finishing the remainder is explicit',()=>{
  let p=transitionPart(ready(),'Finishing');p=recordCompletion(p,1);assert.equal(p.completedQty,1);assert.equal(p.status,'Finishing');
  const before=structuredClone(p),summary=productionSummary([p,{...ready(),id:'second',quantity:8}]);assert.equal(summary.total,10);assert.equal(summary.finished,1);assert.equal(summary.percent,10);
- p=transitionPart(p,'Finished');assert.equal(p.completedQty,p.quantity);assert.equal(p.status,'Finished');assert.equal(before.status,'Finishing');
- assert.equal(transitionPart(p,'Preparing').completedQty,0);
+ assert.throws(()=>transitionPart(p,'Finished'),/Record all good/);p=recordCompletion(p,p.quantity);p=transitionPart(p,'Finished');assert.equal(p.completedQty,p.quantity);assert.equal(p.status,'Finished');assert.equal(before.status,'Finishing');
+ assert.equal(transitionPart(p,'Preparing').completedQty,p.quantity);
 });
 test('invalid completion counts and blocked completion are rejected without changing the record',()=>{
  const p={...ready(),status:'Finishing'};for(const n of [-1,3,1.5,NaN])assert.throws(()=>recordCompletion(p,n));

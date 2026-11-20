@@ -31,6 +31,6 @@ test('edited test IDs and imported CAD records are never removed just for a matc
  const w=emptyWorkspace(),p=makeDemo().parts[0];w.parts=[{...p,id:'bad22d44-8802-48e1-a634-342b763cff31',name:'Real mount'},{...p,id:'demo-part-3',onshape:{key:'actual-cad'}}];assert.equal(cleanWorkspace(w).workspace.parts.length,2);assert.ok(validWorkspace(emptyWorkspace()));assert.deepEqual(emptyWorkspace().parts,[]);
 });
 test('COTS statuses are distinct and filtered-empty text never claims saved records are absent',()=>{
- const item={needed:4,ordered:0,received:0};const states=[cotsStatus(item),cotsStatus({...item,ordered:2}),cotsStatus({...item,ordered:4}),cotsStatus({...item,ordered:4,received:2}),cotsStatus({...item,ordered:4,received:4})];assert.deepEqual(states,COTS_STATUSES);assert.equal(new Set(states).size,5);
- assert.match(cotsEmptyState(96),/No matching COTS parts/);assert.match(cotsEmptyState(96),/data-clear-filters/);assert.match(cotsEmptyState(0),/No purchased parts yet/);assert.doesNotMatch(cotsEmptyState(0),/data-clear-filters/);
+ const item={needed:4,ordered:0,received:0};const states=[cotsStatus(item),cotsStatus({...item,ordered:2}),cotsStatus({...item,ordered:4}),cotsStatus({...item,ordered:4,received:2}),cotsStatus({...item,ordered:4,received:4}),cotsStatus({...item,stock:4})];assert.deepEqual(states,COTS_STATUSES);assert.equal(new Set(states).size,6);
+ assert.match(cotsEmptyState(96),/No matching records/);assert.match(cotsEmptyState(96),/data-clear-filters/);assert.match(cotsEmptyState(0),/No records yet/);assert.doesNotMatch(cotsEmptyState(0),/data-clear-filters/);
 });
