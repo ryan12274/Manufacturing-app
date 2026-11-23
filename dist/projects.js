@@ -18,4 +18,4 @@ export function validProjects(w){
 }
 
 export const projectScope=(w,id)=>({...w,...Object.fromEntries(['parts','materials','cots'].map(k=>[k,(w[k]||[]).filter(r=>r.projectId===id)]))});
-export function mergeProject(w,scope,id){if(!w.projects.some(p=>p.id===id&&!p.archived))throw Error('Choose an active project.');return {...w,importState:scope.importState||w.importState,...Object.fromEntries(['parts','materials','cots'].map(k=>[k,[...(w[k]||[]).filter(r=>r.projectId!==id),...(scope[k]||[]).map(r=>({...r,projectId:id}))]]))};}
+export function mergeProject(w,scope,id){if(!w.projects.some(p=>p.id===id&&!p.archived))throw Error('Choose an active project.');return {...w,importState:scope.importState||w.importState,...(scope.subsystemRules?{subsystemRules:{...w.subsystemRules,[id]:scope.subsystemRules[id]||{}}}:{}),...Object.fromEntries(['parts','materials','cots'].map(k=>[k,[...(w[k]||[]).filter(r=>r.projectId!==id),...(scope[k]||[]).map(r=>({...r,projectId:id}))]]))};}

@@ -51,7 +51,9 @@ async function readOnshapeJson(url,env,fetcher,signal,limit){
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
  try{return JSON.parse(new TextDecoder().decode(bytes));}catch{throw new Error('Onshape returned an invalid JSON response.');}
 }
-export async function readOnshapeParts(env,fetcher=fetch){
+export function onshapeSourceOptions(settings){return (settings.sources||[]).map((s,n)=>{const url=new URL(s.origin+'/documents/'+s.documentId+'/'+s.reference+'/'+s.referenceId+'/e/'+s.elementId);if(s.configuration)url.searchParams.set('configuration',s.configuration);return {url:url.href,label:'BOM '+(n+1)+' · '+s.documentId.slice(0,8)+'…'};});}
+export async function readOnshapeParts(env,fetcher=fetch,{sourceUrl=''}={}){
+ if(sourceUrl){if(typeof sourceUrl!=='string'||sourceUrl.length>3000)throw Error('Invalid Onshape BOM link.');env={...env,ONSHAPE_SOURCE_URLS:JSON.stringify([sourceUrl])};}
  const settings=onshapeSettings(env);if(!settings.configured)throw new Error('Onshape is not connected. Configure the API keys and source documents first.');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
  const parts=[],cots=[],colors=[];let ignored=0;
@@ -83,7 +85,7 @@ export async function readOnshapeParts(env,fetcher=fetch){
   }
   await Promise.all(Array.from({length:Math.min(4,colors.length)},()=>colorWorker()));
   const colorWarnings=missing.size?['Color unavailable for '+missing.size+' manufactured BOM part'+(missing.size===1?'':'s')+'. Existing colors are retained; missing colors can be assigned in part details.']:[];
-  return {parts,cots,ignored,colorWarnings,sourceCount:settings.sources.length,fetchedAt:new Date().toISOString()};
+  return {parts,cots,ignored,colorWarnings,sourceKeys:settings.sources.map(s=>JSON.stringify([s.origin,s.documentId,s.reference,s.referenceId,s.elementId,s.configuration||''])),sourceCount:settings.sources.length,fetchedAt:new Date().toISOString()};
  }catch(err){if(err.name==='AbortError')throw new Error('Onshape timed out. Try again later.');throw err;}
  finally{clearTimeout(timer);}
 }

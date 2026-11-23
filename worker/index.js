@@ -1,11 +1,11 @@
-import {workspaceApi} from './workspace-api.js';
-import {onshapeSettings,readOnshapeParts} from './onshape-api.js';
+import {workspaceApi,sessionIdentity} from './workspace-api.js';
+import {onshapeSettings,onshapeSourceOptions,readOnshapeParts} from './onshape-api.js';
 import {wcpProductData} from './vendors.js';
 // The build embeds the existing browser files into this module as STATIC_FILES.
 export default {
  async fetch(request,env){
   const url=new URL(request.url);
-  if(['/api/session','/api/workspace','/api/reviews'].includes(url.pathname)){try{return await workspaceApi(request,env);}catch{return Response.json({error:'Shared workspace service unavailable.'},{status:503,headers:{'Cache-Control':'no-store'}});}}
+  if(['/api/session','/api/workspace','/api/reviews','/api/revisions'].includes(url.pathname)){try{return await workspaceApi(request,env);}catch{return Response.json({error:'Shared workspace service unavailable.'},{status:503,headers:{'Cache-Control':'no-store'}});}}
   if(url.pathname==='/api/vendors/wcp/product'){
    const headers={'Content-Type':'application/json','Cache-Control':'no-store'};
    if(request.method!=='GET')return Response.json({error:'Method not allowed'},{status:405,headers});
@@ -15,9 +15,13 @@ export default {
    const headers={'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
    if(request.method!=='GET')return new Response(JSON.stringify({error:'Method not allowed'}),{status:405,headers:{...headers,Allow:'GET'}});
    // Sites authenticates visitors before forwarding private-site requests.
-   // No client-supplied target URL or keys are accepted by these endpoints.
-   try{if(url.pathname==='/api/onshape/status'){const settings=onshapeSettings(env);return new Response(JSON.stringify({configured:settings.configured,mode:'bom',readOnly:true,missing:settings.missing,sourceCount:settings.sources?.length||0}),{headers});}
-    if(url.pathname==='/api/onshape/parts')return new Response(JSON.stringify(await readOnshapeParts(env)),{headers});
+   // An administrator may select an assembly BOM URL; keys remain server-only.
+   try{if(url.pathname==='/api/onshape/status'){const settings=onshapeSettings(env);return new Response(JSON.stringify({configured:settings.configured,canSelectSource:settings.configured||settings.missing.every(m=>m==='Assembly BOM source'),mode:'bom',readOnly:true,missing:settings.missing,sourceCount:settings.sources?.length||0,...(sessionIdentity(request,env).isAdmin?{sources:onshapeSourceOptions(settings)}:{})}),{headers});}
+    if(url.pathname==='/api/onshape/parts'){
+     const sourceUrl=url.searchParams.get('source')||'';
+     if(sourceUrl&&!sessionIdentity(request,env).isAdmin)return Response.json({error:'Only admins may select an Onshape BOM source.'},{status:403,headers});
+     return new Response(JSON.stringify(await readOnshapeParts(env,fetch,{sourceUrl})),{headers});
+    }
     return new Response(JSON.stringify({error:'Not found'}),{status:404,headers});
    }catch(err){const message=err.message;const safe=/^(Onshape |Invalid Onshape |Configure |Too many |A matching )/.test(message)?message:'The Onshape connection failed. Check the server configuration.';return new Response(JSON.stringify({error:safe}),{status:502,headers});}
   }

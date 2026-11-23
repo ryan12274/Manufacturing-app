@@ -1,12 +1,12 @@
 import {workspaceApi} from '../worker/workspace-api.js';
-import {onshapeSettings,readOnshapeParts} from '../worker/onshape-api.js';
+import {onshapeSettings,onshapeSourceOptions,readOnshapeParts} from '../worker/onshape-api.js';
 import {wcpProductData} from '../worker/vendors.js';
 import {postgresWorkspaceDatabase} from './netlify-database.js';
 
 const emails=value=>String(value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 export function publicBoard(w){
  const projects=w.projects.filter(p=>!p.archived),active=new Set(projects.map(p=>p.id));
- const partFields=['id','projectId','name','number','subsystem','material','color','process','quantity','completedQty','acceptedQty','spareTarget','reworkQty','scrapQty','owner','assignedTo','priority','due','status','readiness','blocked','blockReason','blockOwner','blockNext','blockDate','blockExpected','location','revision','sourceMissing'];
+ const partFields=['id','projectId','name','number','subsystem','material','color','process','quantity','completedQty','acceptedQty','spareTarget','reworkQty','scrapQty','owner','assignedTo','priority','due','status','readiness','blocked','blockReason','blockOwner','blockNext','blockDate','blockExpected','location','revision','sourceMissing','revisionNumber','revisionFamilyId','revisionOf','revisionArchived','supersededBy'];
  const cotsFields=['id','projectId','name','number','vendor','needed','ordered','received','stock','allocated','packSize','location','subsystem','url','eta'];
  return {version:1,schemaVersion:2,demo:false,projects,students:[],materials:[],onshapeProjectId:'',
   parts:w.parts.filter(p=>active.has(p.projectId)).map(p=>({...Object.fromEntries(partFields.filter(k=>p[k]!==undefined).map(k=>[k,p[k]])),notes:'',cad:'',instructions:'',history:[],...(p.approval?{approval:{status:p.approval.status,reviewedBy:'Admin',...(p.approval.reviewedAt?{reviewedAt:p.approval.reviewedAt}:{})}}:{})})),
@@ -40,7 +40,7 @@ export function createNetlifyApi({getUser,getDatabase,getEnv,readBom=readOnshape
     if(origin!==new URL(request.url).origin)return reply({error:'Open the app on its own site before saving.'},403);
    }
    const serverEnv={...env,ADMIN_EMAILS:admin?email:'',LEAD_EMAILS:roles.has('lead')?email:env.LEAD_EMAILS,VIEWER_EMAILS:roles.has('viewer')?email:env.VIEWER_EMAILS};
-   if(['/api/session','/api/workspace','/api/reviews'].includes(path)){
+   if(['/api/session','/api/workspace','/api/reviews','/api/revisions'].includes(path)){
     // Strip all incoming platform-identity headers, including spoofed values.
     const h=new Headers(request.headers);for(const k of [...h.keys()])if(k.startsWith('oai-authenticated-'))h.delete(k);
     h.set('oai-authenticated-user-id',user.id);h.set('oai-authenticated-user-email',email);
@@ -50,8 +50,12 @@ export function createNetlifyApi({getUser,getDatabase,getEnv,readBom=readOnshape
    if(path.startsWith('/api/onshape/')){
     if(!admin)return reply({error:'Only admins can access the Onshape import.'},403);
     if(request.method!=='GET')return reply({error:'Only read-only BOM requests are supported.'},405);
-    if(path==='/api/onshape/status'){const settings=onshapeSettings(env);return reply({configured:settings.configured,missing:settings.missing,mode:'bom',readOnly:true,sourceCount:settings.sources?.length||0});}
-    if(path==='/api/onshape/parts')return reply(await readBom(env));
+    if(path==='/api/onshape/status'){const settings=onshapeSettings(env);return reply({configured:settings.configured,canSelectSource:settings.configured||settings.missing.every(m=>m==='Assembly BOM source'),missing:settings.missing,mode:'bom',readOnly:true,sourceCount:settings.sources?.length||0,sources:onshapeSourceOptions(settings)});}
+    if(path==='/api/onshape/parts'){
+     const sourceUrl=new URL(request.url).searchParams.get('source')||'';
+     if(sourceUrl){try{if(sourceUrl.length>3000)throw Error();onshapeSettings({...env,ONSHAPE_SOURCE_URLS:JSON.stringify([sourceUrl])});}catch{return reply({error:'Use an Onshape assembly BOM link on the connected server.'},400);}}
+     try{return reply(await readBom(env,fetch,{sourceUrl}));}catch(error){const message=/^(Onshape |Invalid Onshape |Configure |Too many |A matching |BOM )/.test(error.message)?error.message:'The Onshape import could not be read. Check the selected BOM and try again.';return reply({error:message},502);}
+    }
    }
    if(path==='/api/vendors/wcp/product'){
     if(request.method!=='GET')return reply({error:'Read-only product lookup only.'},405);

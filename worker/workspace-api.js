@@ -1,3 +1,4 @@
+import {createPartRevision,validPartRevisions} from '../dist/part-revisions.js';
 import {demand,mergeConcurrent,auditChanges} from '../dist/operations.js';
 import {readinessIssues,localDateKey} from '../dist/manufacturing.js';
 import {validWorkspace,normalizeAssignments} from '../dist/model.js';
@@ -41,11 +42,17 @@ export async function workspaceApi(request,env){
  const restoring=body.action==='restore';if(restoring&&!who.isAdmin)return reply({error:'Only admins can restore a backup.'},403);
  let next;
  if(url.pathname==='/api/reviews')return reply({error:'Reviews have been retired. Only admins may move parts between stages.'},410);
- if(url.pathname==='/api/workspace'&&request.method==='PUT'){
+ if(url.pathname==='/api/revisions'&&request.method==='POST'){
+  if(!who.isAdmin)return reply({error:'Only admins can create part revisions.'},403);
+  const source=previous.parts.find(p=>p.id===body.id);if(!source)return reply({error:'Part not found.'},404);
+  if(source.supersededBy)return reply({workspace:previous,revision:row.revision,isAdmin:true,role:who.role,initialized:true,createdPartId:source.supersededBy});
+  try{next=normalizeAssignments(createPartRevision(previous,body.id).workspace);}catch(err){return reply({error:err.message},400);}
+ }else if(url.pathname==='/api/workspace'&&request.method==='PUT'){
   if(!validWorkspace(body.workspace))return reply({error:'Invalid workspace data.'},400);
   next=normalizeAssignments(body.workspace);
+  if(!restoring&&previous.parts.some(old=>old.revisionArchived&&(()=>{const p=next.parts.find(x=>x.id===old.id);return !p||[...new Set([...Object.keys(old),...Object.keys(p)])].some(k=>JSON.stringify(old[k])!==JSON.stringify(p[k]));})()))return reply({error:'Previous revisions are historical records. Open the current version to make changes.'},400);
   if(!who.isAdmin&&(!row||!memberCanSave(previous,next)))return reply({error:'Only admins can change projects, assignments, or part details.'},403);
-  if(next.parts.some(p=>p.status!=='Done'&&p.assignedTo&&!next.students.some(s=>s.active&&s.name===p.assignedTo)))return reply({error:'Advance assignments must use an active student.'},400);
+  if(next.parts.some(p=>!p.revisionArchived&&p.status!=='Done'&&p.assignedTo&&!next.students.some(s=>s.active&&s.name===p.assignedTo)))return reply({error:'Advance assignments must use an active student.'},400);
   if(!who.isAdmin&&(JSON.stringify(next.projects)!==JSON.stringify(previous.projects)||JSON.stringify(next.students)!==JSON.stringify(previous.students)||next.onshapeProjectId!==previous.onshapeProjectId))return reply({error:'Only admins manage projects, students and the BOM destination.'},403);
   if(!who.isAdmin&&next.parts.some(p=>previous.parts.find(x=>x.id===p.id)?.status!==p.status))return reply({error:'Only admins can change manufacturing stages.'},403);
   // Splitting an existing batch preserves its prior stage and recorded work.
@@ -63,9 +70,10 @@ export async function workspaceApi(request,env){
   // Stage changes are the administrator's sign-off; there is no separate review state.
  }else return reply({error:'Not found'},404);
  if(!who.isAdmin&&next.parts.some(p=>previous.parts.find(x=>x.id===p.id)?.status!==p.status))return reply({error:'Only admins can change manufacturing stages.'},403);
- for(const p of next.parts){const old=previous.parts.find(x=>x.id===p.id);const changes=auditChanges({parts:old?[old]:[]},{parts:[p]},who.email);if(changes.length)p.history=[...new Map([...(old?.history||[]),...(who.isAdmin?(p.history||[]):[])].map(h=>[JSON.stringify(h),h])).values(),{at:new Date().toISOString(),worker:who.email,label:Object.keys(changes[0].changes).join(', ')+' updated'}].slice(-50);}
+ if(!validPartRevisions(next.parts))return reply({error:'Invalid part revision links.'},400);
+ for(const p of next.parts){const old=previous.parts.find(x=>x.id===p.id);if(old&&(old.revisionArchived||url.pathname==='/api/revisions'&&p.id===body.id))continue;const changes=auditChanges({parts:old?[old]:[]},{parts:[p]},who.email);if(changes.length)p.history=[...new Map([...(old?.history||[]),...(who.isAdmin?(p.history||[]):[])].map(h=>[JSON.stringify(h),h])).values(),{at:new Date().toISOString(),worker:who.email,label:Object.keys(changes[0].changes).join(', ')+' updated'}].slice(-50);}
  next={...next,auditLog:[...(previous.auditLog||[]),...(restoring?(next.auditLog||[]).filter(a=>!(previous.auditLog||[]).some(b=>JSON.stringify(a)===JSON.stringify(b))).map(a=>({...a,restoredBy:who.email})):[]),...auditChanges(previous,next,who.email),...(restoring?[{kind:'workspace',id:'team',name:'Backup restored',actor:who.email,at:new Date().toISOString(),changes:{parts:{before:previous.parts.length,after:next.parts.length},cots:{before:previous.cots.length,after:next.cots.length}}}]:[])],recordTombstones:[...(previous.recordTombstones||[]),...['parts','cots'].flatMap(kind=>previous[kind].filter(p=>!next[kind].some(x=>x.id===p.id)).map(record=>({kind,record,removedBy:who.email,at:new Date().toISOString()})))]};
  const revision=(row?.revision||0)+1;const statement=row?env.DB.prepare('UPDATE workspace_state SET state_json = ?, revision = ? WHERE id = ? AND revision = ?').bind(JSON.stringify(next),revision,'team',row.revision):env.DB.prepare('INSERT OR IGNORE INTO workspace_state (id,state_json,revision) VALUES (?,?,?)').bind('team',JSON.stringify(next),revision);
  const result=await statement.run();if(result.meta?.changes!==1)return reply({error:'Workspace changed. Reload and try again.'},409);
- return reply({workspace:next,revision,isAdmin:who.isAdmin,role:who.role,initialized:true});
+ return reply({workspace:next,revision,isAdmin:who.isAdmin,role:who.role,initialized:true,...(url.pathname==='/api/revisions'?{createdPartId:next.parts.find(p=>p.revisionOf===body.id)?.id}:{})});
 }

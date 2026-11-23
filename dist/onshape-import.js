@@ -1,5 +1,11 @@
+import {applyImportSubsystems} from './subsystem-rules.js';
 // Shared by the browser importer and the server API. No credentials belong here.
 import {partColorHex,generalizePartColor,isPartColor} from './part-colors.js';
+export function bomSourceIdentity(key){try{const value=JSON.parse(key);return Array.isArray(value)&&['bom','bom-cots'].includes(value[0])&&value.length>=7?JSON.stringify(value.slice(1,7)):'';}catch{return '';}}
+export function selectedBom(data,selectedKeys=null){
+ if(selectedKeys===null)return {...data,partial:false};
+ const selected=new Set(selectedKeys);return {...data,parts:data.parts.filter(p=>selected.has(p.key)),cots:(data.cots||[]).filter(p=>selected.has(p.key)),partial:true};
+}
 export const PART_PREFIX='7028';
 const clean=value=>typeof value==='string'?value.trim().slice(0,500):'';
 const usableBomValue=value=>!!value&&!/^(n\/?a|null|none|undefined|-)$/i.test(value);
@@ -82,7 +88,11 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
 export function mergeOnshapeBom(workspace,data,idFactory){
  const manufactured=mergeOnshapeParts(workspace,data.parts,idFactory);
  const purchased=mergeOnshapeCots(manufactured.workspace,data.cots||[],idFactory);
- const incoming=new Set([...(data.parts||[]),...(data.cots||[])].map(p=>p.key));const preview=[];for(const kind of ['parts','cots'])for(const item of purchased.workspace[kind]){if(item.onshape?.key&&(!incoming.has(item.onshape.key)||kind==='parts'&&item.sourceMissing)){item.sourceMissing=true;preview.push({id:item.id,name:item.name,change:'No longer in BOM; retained for review'});}const old=(workspace[kind]||[]).find(p=>p.id===item.id);if(!old)preview.push({id:item.id,name:item.name,change:'New record'});else{const fields=(kind==='parts'?['name','number','material','color','quantity']:['name','number','needed']).filter(k=>old[k]!==item[k]);if(fields.length)preview.push({id:item.id,name:item.name,change:fields.map(k=>k+': '+old[k]+' → '+item[k]).join(', ')});}if(kind==='parts'&&(!item.material||!item.process))preview.push({id:item.id,name:item.name,change:'Missing material or process; requires shop setup'});}
+ const mapped=applyImportSubsystems(purchased.workspace,(data.parts||[]).map(p=>p.key),data.projectId,data.subsystemRules);
+ for(const part of mapped.parts){const before=workspace.parts.find(p=>p.id===part.id),source=purchased.workspace.parts.find(p=>p.id===part.id);if(before&&source&&before.subsystem!==part.subsystem&&JSON.stringify(before)===JSON.stringify(source)){manufactured.updated++;manufactured.unchanged--;}}
+ purchased.workspace=mapped;
+ if(data.projectId&&data.subsystemRules)purchased.workspace.subsystemRules={...workspace.subsystemRules,[data.projectId]:data.subsystemRules};
+ const incoming=new Set([...(data.parts||[]),...(data.cots||[])].map(p=>p.key));const preview=[];for(const kind of ['parts','cots'])for(const item of purchased.workspace[kind]){if(!item.revisionArchived&&item.onshape?.key&&!data.partial&&(!data.sourceKeys||data.sourceKeys.includes(bomSourceIdentity(item.onshape.key)))&&(!incoming.has(item.onshape.key)||kind==='parts'&&item.sourceMissing)){item.sourceMissing=true;preview.push({id:item.id,name:item.name,change:'No longer in BOM; retained for review'});}const old=(workspace[kind]||[]).find(p=>p.id===item.id);if(!old)preview.push({id:item.id,name:item.name,change:'New record'});else{const fields=(kind==='parts'?['name','number','material','color','quantity','subsystem']:['name','number','needed']).filter(k=>old[k]!==item[k]);if(fields.length)preview.push({id:item.id,name:item.name,change:fields.map(k=>k+': '+old[k]+' → '+item[k]).join(', ')});}if(kind==='parts'&&(!item.material||!item.process))preview.push({id:item.id,name:item.name,change:'Missing material or process; requires shop setup'});}
  return {preview,colorWarnings:data.colorWarnings||[],workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts],conflictDetails:[...manufactured.conflictDetails,...purchased.conflictDetails],sharedNumbers:manufactured.sharedNumbers};
 }
 
@@ -132,9 +142,9 @@ export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.random
  let parts=workspace.parts.map(p=>({...p})),added=0,updated=0,unchanged=0;
  const conflicts=[],conflictDetails=[];
  for(const p of sourceKeys.values()){
-  let group=parts.filter(r=>r.onshape?.key===p.key);
+  let group=parts.filter(r=>!r.revisionArchived&&r.onshape?.key===p.key);
   const legacy=group.filter(r=>r.onshape.instance===undefined);
-  const manual=parts.filter(r=>r.number.trim()===p.number&&!r.onshape);
+  const manual=parts.filter(r=>!r.revisionArchived&&r.number.trim()===p.number&&!r.onshape);
   const ordinals=group.map(r=>r.onshape.instance??1);
   if(legacy.length>1||legacy.length&&group.length>1||new Set(ordinals).size!==ordinals.length||ordinals.some(n=>!Number.isSafeInteger(n)||n<1)||!group.length&&manual.length){
    conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:(group.length?group:manual).map(i=>i.id)});continue;

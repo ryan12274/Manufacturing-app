@@ -10,7 +10,14 @@ export function sharedWorkspace({getLocal,onLoad,onRole,onError,onStatus=()=>{},
  async function retry(){if(pending)return;if(failed)await transmit(failed);else await start();}
  async function resolve(workspace,remote,remoteRevision,restore=false){const body={workspace,baseWorkspace:remote,baseRevision:remoteRevision,...(restore?{action:'restore'}:{})};localStorage.setItem(key,JSON.stringify(body));await transmit(body);}
 
+ async function createRevision(id){
+  if(!ready||pending||role!=='admin')throw Error('Wait for pending saves and use an admin account.');
+  pending=true;ready=false;status('Creating revision');
+  try{const d=await request('POST','/api/revisions',{id,baseRevision:revision});loaded(d);status('Saved');return d.createdPartId;}
+  catch(e){ready=true;status('Revision was not confirmed · refresh before retrying');throw e;}
+  finally{pending=false;}
+ }
  const timer=setInterval(async()=>{if(!ready||pending||document.hidden||document.querySelector('dialog[open]'))return;try{const d=await request('GET','/api/workspace');if(d.revision!==revision)loaded(d);else lastRefresh=new Date().toISOString();status('Saved');}catch(e){ready=false;status(e.offline?'Offline':'Refresh failed');}},10000);
  window.addEventListener('online',()=>{if(!failed)start();else status('Changes waiting to sync');});window.addEventListener('offline',()=>{ready=false;status('Offline · editing unavailable');});window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
- return {start,save,retry,resolve,get ready(){return ready&&!pending&&role!=='viewer';}};
+ return {start,save,retry,resolve,createRevision,get ready(){return ready&&!pending&&role!=='viewer';}};
 }

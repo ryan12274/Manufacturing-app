@@ -31,7 +31,7 @@ export function initBoardDrag({root,canMove,getPart,onMove,onUnavailable}){
   if(!card||!root.contains(card)||e.button!==0||e.isPrimary===false||drag)return;
   if(!handle&&(e.pointerType==='touch'||e.target.closest('button,a,input,select,textarea,summary,details')))return;
   if(!canMove()){if(handle)onUnavailable();return;}
-  const part=getPart(card.dataset.partId);if(!part)return;
+  const part=getPart(card.dataset.partId);if(!part||part.revisionArchived)return;
   e.preventDefault();root.setPointerCapture(e.pointerId);
   drag={id:part.id,original:JSON.stringify(part),card,handle,pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,started:false};
  });

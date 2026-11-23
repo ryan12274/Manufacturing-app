@@ -1,3 +1,5 @@
+import {validPartRevisions} from './part-revisions.js';
+import {validSubsystemRules} from './subsystem-rules.js';
 import {migrateOperations,validOperations,demand} from './operations.js';
 import {normalizeProjects,validProjects} from './projects.js';
 import {validCots} from './cots-model.js';
@@ -10,10 +12,10 @@ export function normalizeAssignments(workspace) {
   return migrateOperations(normalizeProjects({...workspace,cots:workspace.cots??[],parts:workspace.parts.map(p=>({...p,status:stages[p.status]||p.status,blocked:p.status==='Blocked'||p.blocked===true,assignedTo:p.assignedTo??p.owner,completedQty:p.completedQty??(['Complete','Finished','Done'].includes(p.status)?p.quantity:0),readiness:p.readiness??{drawingReviewed:false,materialReady:false,setupReady:false}}))}));
 }
 export function needsWorkerSelection(part,target){
-  return ['Cutting','Finishing'].includes(target)&&(part.status==='Not Started'||part.status==='Done'||!part.owner?.trim());
+  return !part.revisionArchived&&STATUSES.includes(target)&&part.status!==target;
 }
 export function startPart(part, worker='',target='Cutting') {
-  if(!['Cutting','Finishing'].includes(target))throw new Error('Choose a manufacturing stage to start.');
+  if(!STATUSES.includes(target))throw new Error('Choose a manufacturing stage to start.');
   const owner=part.assignedTo?.trim()||worker.trim();
   if(!owner) throw new Error('Choose who is starting this part.');
   return {...part,owner,status:target};
@@ -21,7 +23,7 @@ export function startPart(part, worker='',target='Cutting') {
 export function validWorkspace(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.parts) || !Array.isArray(data.materials)) return false;
   if(!validOperations(data))return false;
-  if(!validProjects(data))return false;
+  if(!validProjects(data)||!validPartRevisions(data.parts)||!validSubsystemRules(data))return false;
   if(data.parts.some(p=>p&&p.color!==undefined&&!isPartColor(p.color)))return false;
   if(data.cots!==undefined&&!validCots(data.cots))return false;
   if(data.parts.some(p=>p&&((p.completedQty!==undefined&&(!Number.isSafeInteger(p.completedQty)||p.completedQty<0||p.completedQty>demand(p)))||(p.readiness!==undefined&&(!p.readiness||typeof p.readiness!=='object'||Array.isArray(p.readiness)||!['drawingReviewed','materialReady','setupReady'].every(k=>typeof p.readiness[k]==='boolean')))||(p.history!==undefined&&(!Array.isArray(p.history)||p.history.length>50||!p.history.every(h=>h&&typeof h.at==='string'&&!Number.isNaN(Date.parse(h.at))&&typeof h.label==='string'&&h.label.length<=500&&typeof h.worker==='string'&&h.worker.length<=500))))))return false;

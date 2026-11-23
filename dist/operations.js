@@ -22,7 +22,7 @@ export function mergeConcurrent(base,local,remote){
   for(const id of new Set([...b.keys(),...l.keys(),...r.keys()])){const old=b.get(id),mine=l.get(id),theirs=r.get(id);if(sameValue(old,mine)){if(theirs)rows.push(theirs);continue;}if(sameValue(old,theirs)||sameValue(mine,theirs)){if(mine)rows.push(mine);continue;}if(!old||!mine||!theirs){conflicts.push({kind,id,name:mine?.name||theirs?.name||id,field:'record',before:old,local:mine,remote:theirs});if(theirs)rows.push(theirs);continue;}const row={...theirs};for(const key of new Set([...Object.keys(old),...Object.keys(mine),...Object.keys(theirs)])){if(['history','updatedAt','approval','acceptedQty'].includes(key))continue;if(sameValue(old[key],mine[key]))continue;if(!sameValue(old[key],theirs[key])&&!sameValue(mine[key],theirs[key]))conflicts.push({kind,id,name:mine.name||id,field:key,before:old[key],local:mine[key],remote:theirs[key]});else row[key]=mine[key];}rows.push(row);}
   result[kind]=rows;
  }
- for(const key of ['onshapeProjectId','demo','importState']){if(sameValue(base[key],local[key]))continue;if(!sameValue(base[key],remote[key])&&!sameValue(local[key],remote[key]))conflicts.push({kind:'workspace',id:'team',field:key,local:local[key],remote:remote[key]});else result[key]=local[key];}
+ for(const key of ['onshapeProjectId','demo','importState','subsystemRules']){if(sameValue(base[key],local[key]))continue;if(!sameValue(base[key],remote[key])&&!sameValue(local[key],remote[key]))conflicts.push({kind:'workspace',id:'team',field:key,local:local[key],remote:remote[key]});else result[key]=local[key];}
  return {workspace:result,conflicts};
 }
 export function auditChanges(before,next,actor,at=new Date().toISOString()){
