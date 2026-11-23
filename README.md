@@ -4,9 +4,9 @@ A responsive manufacturing workspace for FRC Team 7028, with a server-side Onsha
 
 ## Preview and release workflow
 
-Develop and review changes on `codex/preview`. `main` is reserved for explicitly requested production releases. Routine changes should be tested locally or on a non-production branch deployment, without pushing `main` or automatically publishing to the existing Sites host.
+Develop and review changes on `preview`. `main` is reserved for explicitly requested production releases. Routine changes should be tested locally or on a non-production branch deployment, without pushing `main` or automatically publishing to the existing Sites host.
 
-For a Git-connected Netlify site, keep its production branch set to `main`. Under **Project configuration > Developer settings > Continuous deployment > Branches and deploy contexts > Configure**, enable branch deploys for **Individual branches**, and add `codex/preview`. These settings belong to the Netlify site and are not enabled merely by creating the Git branch. Netlify provides the preview URL after a successful branch deployment.
+For a Git-connected Netlify site, keep its production branch set to `main`. Under **Project configuration > Developer settings > Continuous deployment > Branches and deploy contexts > Configure**, enable branch deploys for **Individual branches**, and add `preview`. These settings belong to the Netlify site and are not enabled merely by creating the Git branch. Netlify provides the preview URL after a successful branch deployment.
 
 Netlify documents free branch/Deploy Preview deployments on credit-based plans; traffic and backend resource usage can still consume credits. Existing build, backend, environment and storage configuration still applies to the preview. Keep preview data separate from live team data.
 
