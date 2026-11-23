@@ -8,6 +8,8 @@ Develop and review changes on `preview`. `main` is reserved for explicitly reque
 
 For a Git-connected Netlify site, keep its production branch set to `main`. Under **Project configuration > Developer settings > Continuous deployment > Branches and deploy contexts > Configure**, enable branch deploys for **Individual branches**, and add `preview`. These settings belong to the Netlify site and are not enabled merely by creating the Git branch. Netlify provides the preview URL after a successful branch deployment.
 
+The current Netlify project is [7028man](https://7028man.netlify.app/). Its saved branch settings were verified on 2026-11-23: production `main`, additional branch `preview`. No deployment was triggered by enabling this setting. The site returned 404 at that check; build/publish settings and a compatible backend still need configuration before claiming a working Netlify deployment.
+
 Netlify documents free branch/Deploy Preview deployments on credit-based plans; traffic and backend resource usage can still consume credits. Existing build, backend, environment and storage configuration still applies to the preview. Keep preview data separate from live team data.
 
 References: [branch deploy setup](https://docs.netlify.com/deploy/deploy-types/branch-deploys/) and [credit usage](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/).
