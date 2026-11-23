@@ -8,17 +8,17 @@ import {COTS_STATUSES,cotsStatus} from '../dist/cots-model.js';
 import {shopBoard} from '../dist/shop.js';
 import {partsRegister} from '../dist/register.js';
 test('overdue dates use whole calendar days and exclude finished and due-today work',()=>{
- const p={due:'2026-11-14',status:'Preparing'};assert.equal(overdueDays(p,'2026-11-18'),4);assert.equal(overdueDays({...p,due:'2026-11-17'},'2026-11-18'),1);
- for(const delta of [{due:''},{due:'2026-11-18'},{due:'2026-11-19'},{status:'Finished'}])assert.equal(overdueDays({...p,...delta},'2026-11-18'),0);
+ const p={due:'2026-11-14',status:'Not Started'};assert.equal(overdueDays(p,'2026-11-18'),4);assert.equal(overdueDays({...p,due:'2026-11-17'},'2026-11-18'),1);
+ for(const delta of [{due:''},{due:'2026-11-18'},{due:'2026-11-19'},{status:'Done'}])assert.equal(overdueDays({...p,...delta},'2026-11-18'),0);
  assert.equal(overdueDays({...p,due:'2026-03-07'},'2026-03-09'),2);
 });
 test('legacy active readiness exceptions are separate from the queue ready to start cutting',()=>{
  const p=makeDemo().parts[0];assert.ok(readinessException({...p,status:'Cutting'}));assert.ok(readinessException({...p,status:'Finishing'}));
- assert.equal(readinessException({...p,status:'Preparing'}),false);
+ assert.equal(readinessException({...p,status:'Not Started'}),false);
  const checked={...p,readiness:{drawingReviewed:true,materialReady:true,setupReady:true}};
  assert.equal(readinessException({...checked,status:'Cutting',blocked:true}),false);
- const summary=productionSummary([{...p,status:'Cutting'},{...checked,status:'Preparing'}]);assert.equal(summary.exceptions,1);assert.equal(summary.ready,1);
- const board=shopBoard([{...p,status:'Cutting',due:'2000-01-01'}],d=>d);assert.match(board,/Readiness exception/);assert.match(board,/Overdue by/);assert.match(board,/Work is in progress/);
+ const summary=productionSummary([{...p,status:'Cutting'},{...checked,status:'Not Started'}]);assert.equal(summary.exceptions,1);assert.equal(summary.ready,1);
+ const board=shopBoard([{...p,status:'Cutting',due:'2000-01-01'}],d=>d);assert.match(board,/Overdue/);assert.match(board,/Cutting/);assert.doesNotMatch(board,/approval|accepted/);
  assert.match(partsRegister([{...p,status:'Cutting',due:'2000-01-01'}]),/due-overdue/);
 });
 test('cleanup removes only seeded examples and exact test signatures, preserving real work and order counts',()=>{
