@@ -13,7 +13,7 @@ test('McMaster aliases share one vendor filter and order group without changing 
  assert.deepEqual([...new Set(items.map(i=>vendorName(i.vendor)))],['McMaster-Carr']);
  assert.equal(items.filter(i=>vendorName(i.vendor)==='McMaster-Carr').length,aliases.length);
  const orders=vendorOrders(items);assert.equal((orders.match(/data-vendor-cart=/g)||[]).length,1);
- assert.match(orders,/6 items · 33 to order/);assert.match(orders,/data-vendor-cart="McMaster-Carr"/);
+ assert.match(orders,/48 required parts/);assert.match(orders,/<progress value="15" max="48"/);assert.match(orders,/data-vendor-cart="McMaster-Carr"/);
  assert.equal((cotsTable(items).match(/<td>McMaster-Carr<\/td>/g)||[]).length,aliases.length);
  assert.deepEqual(items,before);assert.equal(vendorName('McMaster Supplies'),'McMaster Supplies');
 });

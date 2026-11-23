@@ -96,11 +96,11 @@ export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.random
   const manual=sameNumber.filter(r=>!r.onshape);if(identityMatches.length>1||(!identityMatches.length&&manual.length)){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:(identityMatches.length?identityMatches:manual).map(i=>i.id)});continue;}
   const existing=identityMatches[0];
   if(existing){
-   const completed=existing.completedQty??(existing.status==='Finished'?existing.quantity:0);
+   const completed=existing.completedQty??(existing.status==='Done'?existing.quantity:0);
    if(p.quantity<completed){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:[existing.id],reason:'BOM quantity is below the recorded finished quantity. Correct the finished count first.'});continue;}
    const sourceFields=existing.localOverride?['quantity']:['name','number','material','cad','quantity'];const changed=sourceFields.some(k=>existing[k]!==p[k])||existing.sourceMissing;
-   if(changed){const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};if(['name','number','cad'].some(k=>existing[k]!==p[k]))readiness.drawingReviewed=false;if(['material','quantity'].some(k=>existing[k]!==p[k])){readiness.materialReady=false;readiness.setupReady=false;}const status=existing.status==='Finished'&&p.quantity>completed?'Finishing':existing.status;Object.assign(existing,{...Object.fromEntries(sourceFields.map(k=>[k,p[k]])),sourceMissing:false,completedQty:completed,readiness,status});updated++;}else unchanged++;
-  }else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key,mode:'bom'},subsystem:'',process:'',quantity:p.quantity,completedQty:0,readiness:{drawingReviewed:false,materialReady:false,setupReady:false},owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:''});added++;}
+   if(changed){const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};if(['name','number','cad'].some(k=>existing[k]!==p[k]))readiness.drawingReviewed=false;if(['material','quantity'].some(k=>existing[k]!==p[k])){readiness.materialReady=false;readiness.setupReady=false;}const status=existing.status==='Done'&&p.quantity>completed?'Finishing':existing.status;Object.assign(existing,{...Object.fromEntries(sourceFields.map(k=>[k,p[k]])),sourceMissing:false,completedQty:completed,readiness,status});updated++;}else unchanged++;
+  }else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key,mode:'bom'},subsystem:'',process:'',quantity:p.quantity,completedQty:0,readiness:{drawingReviewed:false,materialReady:false,setupReady:false},owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not Started',blocked:false,notes:''});added++;}
  }
  return {workspace:{...workspace,parts},added,updated,unchanged,conflicts:[...new Set(conflicts)],conflictDetails,sharedNumbers:[...numbers].filter(([,keys])=>keys.size>1).map(([number])=>number)};
 }
@@ -117,7 +117,7 @@ export function resolveBomConflict(workspace,detail,existingId='',idFactory=()=>
  // A separate record is explicitly linked first, so manual number collisions cannot
  // cause the same unresolved conflict on subsequent syncs.
  if(!existingId){
-  const base=kind==='parts'?{id:idFactory(),...part,quantity:part.quantity,completedQty:0,subsystem:'',process:'',owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not started',blocked:false,notes:'',readiness:{drawingReviewed:false,materialReady:false,setupReady:false}}:{id:idFactory(),name:part.name,number:part.number,vendor:part.vendor,needed:part.quantity,ordered:0,received:0,url:'',eta:'',reference:'',notes:''};
+  const base=kind==='parts'?{id:idFactory(),...part,quantity:part.quantity,completedQty:0,subsystem:'',process:'',owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not Started',blocked:false,notes:'',readiness:{drawingReviewed:false,materialReady:false,setupReady:false}}:{id:idFactory(),name:part.name,number:part.number,vendor:part.vendor,needed:part.quantity,ordered:0,received:0,url:'',eta:'',reference:'',notes:''};
   delete base.key;next={...workspace,[kind]:[...(workspace[kind]||[]),{...base,onshape:{key:part.key,mode:'bom'}}]};
  }
  const result=kind==='parts'?mergeOnshapeParts(next,[part],idFactory):mergeOnshapeCots(next,[part],idFactory);

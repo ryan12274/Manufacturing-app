@@ -1,11 +1,15 @@
-import {accepted} from './operations.js';
-import {readinessIssues,completedQuantity,readinessException,overdueDays} from './manufacturing.js';
-const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function drawingLink(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?`<a class="drawing-link" href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">Open drawing</a>`:'';}catch{return '';}}
-export function partsRegister(parts){
- const numbers=new Map();for(const p of parts)numbers.set(p.number,(numbers.get(p.number)||0)+1);
- return `<div class="table-wrap"><table class="register-table responsive-table"><thead><tr><th>Part</th><th>Material</th><th>Process</th><th>Batch</th><th>Readiness</th><th>Subsystem</th><th>CAD</th><th>Due</th></tr></thead><tbody>${parts.map(p=>{
-  const issues=readinessIssues(p);
-  return `<tr class="${overdueDays(p)?'is-overdue':''}"><td><button class="part-name" data-edit="${escape(p.id)}">${escape(p.name)}</button><div class="part-number">${escape(p.number||'No number')}${numbers.get(p.number)>1?' <span class="shared-number">Shared number</span>':''}${p.blocked?' <span class="blocked-tag">Blocked</span>':''}</div></td><td data-label="Material">${escape(p.material)||'<span class="muted">Not set</span>'}</td><td data-label="Process">${escape(p.process)||'<span class="muted">Not set</span>'}</td><td data-label="Batch">${accepted(p)} accepted / ${p.quantity} required<br>${completedQuantity(p)} fabricated good</td><td data-label="Readiness"><button class="readiness-link ${p.status==='Finished'||!issues.length?'is-ready':'needs-checks'}" data-edit="${escape(p.id)}">${p.status==='Finished'?'Finished':readinessException(p)?'Readiness exception':issues.length?issues[0]:['Not started','Preparing'].includes(p.status)?'Ready to start cutting':'Readiness confirmed'}</button></td><td data-label="Subsystem">${escape(p.subsystem)||'<span class="muted">Not set</span>'}</td><td data-label="CAD">${drawingLink(p.cad)||'<span class="muted">Not linked</span>'}</td><td data-label="Due" class="${overdueDays(p)?'due-overdue':''}">${overdueDays(p)?'<span class="overdue-badge">Overdue by '+overdueDays(p)+' day'+(overdueDays(p)===1?'':'s')+'</span><br>':''}${p.due?escape(new Date(p.due+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):'<span class="muted">Not set</span>'}</td></tr>`;
- }).join('')}</tbody></table></div>`;
+import {overdueDays} from './manufacturing.js';
+import {STATUSES} from './model.js';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export const PART_COLUMNS=[['name','Part name and number'],['subsystem','Subsystem'],['status','Stage'],['material','Material'],['student','Student'],['due','Due']];
+export function sortParts(parts,key='name',direction='asc'){
+ const value=p=>key==='student'?p.assignedTo||p.owner||'':key==='name'?p.name+' '+p.number:p[key]||'';
+ return [...parts].sort((a,b)=>{
+  if(key==='due'&&(!a.due||!b.due))return Number(!a.due)-Number(!b.due);
+  const result=key==='status'?STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status):String(value(a)).localeCompare(String(value(b)),undefined,{numeric:true,sensitivity:'base'});
+  return (direction==='desc'?-1:1)*result;
+ });
+}
+export function partsRegister(parts,sort={key:'name',direction:'asc'}){
+ return `<div class="table-wrap"><table class="register-table"><thead><tr>${PART_COLUMNS.map(([key,label])=>`<th scope="col" aria-sort="${sort.key===key?(sort.direction==='asc'?'ascending':'descending'):'none'}"><button class="column-sort" data-sort="${key}">${label}${sort.key===key?` <span aria-hidden="true">${sort.direction==='asc'?'▴':'▾'}</span>`:''}</button></th>`).join('')}</tr></thead><tbody>${sortParts(parts,sort.key,sort.direction).map(p=>`<tr class="${overdueDays(p)?'is-overdue':''}"><td><button class="part-name" data-edit="${esc(p.id)}">${esc(p.name)}</button><div class="part-number">${esc(p.number||'No number')}${p.blocked?' <span class="blocked-tag">Blocked</span>':''}</div></td><td>${esc(p.subsystem||'Not set')}</td><td><span class="status ${p.status==='Done'?'complete':''}">${esc(p.status)}</span></td><td>${esc(p.material||'Not set')}</td><td>${esc(p.assignedTo||p.owner||'Unassigned')}</td><td class="${overdueDays(p)?'due-overdue':''}">${p.due?esc(new Date(p.due+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})):'Not set'}</td></tr>`).join('')}</tbody></table></div>`;
 }
