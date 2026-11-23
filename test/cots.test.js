@@ -14,7 +14,7 @@ test('McMaster aliases share one vendor filter and order group without changing 
  assert.equal(items.filter(i=>vendorName(i.vendor)==='McMaster-Carr').length,aliases.length);
  const orders=vendorOrders(items);assert.equal((orders.match(/data-vendor-cart=/g)||[]).length,1);
  assert.match(orders,/6 items · 33 to order/);assert.match(orders,/data-vendor-cart="McMaster-Carr"/);
- assert.equal((cotsTable(items).match(/<td>McMaster-Carr<\/td>/g)||[]).length,aliases.length);
+ assert.equal((cotsTable(items).match(/<span>McMaster-Carr<\/span>/g)||[]).length,aliases.length);
  assert.deepEqual(items,before);assert.equal(vendorName('McMaster Supplies'),'McMaster Supplies');
 });
 test('COTS order status and outstanding quantities reflect partial orders and deliveries',()=>{assert.equal(cotsStatus(item),'Need to order');assert.equal(toOrder(item),8);assert.equal(cotsStatus({...item,ordered:3}),'Partially ordered');assert.equal(toOrder({...item,ordered:3}),5);assert.equal(cotsStatus({...item,ordered:8}),'Fully ordered');assert.equal(cotsStatus({...item,ordered:8,received:3}),'Partially received');assert.equal(cotsStatus({...item,ordered:8,received:8}),'Fully received');assert.equal(toOrder({...item,ordered:10}),0);});

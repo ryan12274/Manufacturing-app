@@ -1,3 +1,4 @@
+import {initBoardDrag} from './board-drag.js';
 import {askText,confirmAction,chooseBulk} from './dialogs.js';
 import {demand,accepted,purchasing,mergeConcurrent,operationalKey} from './operations.js';
 import {operationalFields,readOperationalFields,queueList,readinessOverview,operationalExport} from './operations-ui.js';
@@ -45,7 +46,7 @@ function render(){
  $('#vendor-orders').hidden=view!=='cots'||!state.cots.some(i=>toOrder(i)>0);$('#vendor-orders').innerHTML=view==='cots'?vendorOrders(state.cots):'';
  $('#record-count').textContent=view==='cots'?state.cots.length:view==='inventory'?state.materials.length:state.parts.length;
  const rows=filtered(); $('#result-count').textContent=`Showing ${rows.length} of ${view==='cots'?state.cots.length:view==='inventory'?state.materials.length:state.parts.length} ${view==='inventory'?'materials':view==='cots'?'COTS parts':'parts'}`;
- if(view==='board'){$('#records').innerHTML=!rows.length?emptyResults():$('#queue-layout').value==='list'?queueList(rows):shopBoard(rows,dateLabel);return;}
+ if(view==='board'){$('#records').innerHTML=!rows.length?emptyResults():$('#queue-layout').value==='list'?queueList(rows):shopBoard(rows,dateLabel,{canMove:accessRole!=='viewer'});return;}
  if(view==='cots'){$('#records').innerHTML=rows.length?cotsTable(rows):cotsEmptyState(state.cots.length);return;}
  if(!rows.length){$('#records').innerHTML=emptyResults();return;}
  if(view==='inventory'){$('#records').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Material / specification</th><th>On hand</th><th>Minimum</th><th>Location</th><th>Stock status</th></tr></thead><tbody>${rows.map(m=>`<tr><td><button class="part-name" data-edit="${escape(m.id)}">${escape(m.name)}</button><div class="part-number">${escape(m.spec)}</div></td><td>${m.stock} ${escape(m.unit)}</td><td>${m.minimum} ${escape(m.unit)}</td><td>${escape(m.location||'Unassigned')}</td><td><span class="status ${m.stock<=m.minimum?'blocked':'complete'}">${m.stock<=m.minimum?'Reorder soon':'In stock'}</span></td></tr>`).join('')}</tbody></table></div>`;return;}
@@ -111,6 +112,18 @@ $('#start-dialog').addEventListener('close',()=>{pendingStart=null;render();});
 $('#delete-record').onclick=async()=>{if(!isAdmin)return;if(!await confirmAction('Remove this record? It can be recovered from Admin activity and recovery.'))return;const key=view==='inventory'?'materials':'parts';if(save({...state,[key]:state[key].filter(r=>r.id!==editing)})){$('#record-dialog').close();refreshFilters();render();toast('Record deleted');}};
 $('#records').onclick=e=>{if(e.target.closest('[data-clear-filters]')){workflowFilter='all';for(const id of ['queue-focus','process-filter','priority-filter'])$('#'+id).value='';$('#search').value='';$('#status-filter').value='';$('#subsystem-filter').value='';$('#tag-filter').value='';render();return;}if(e.target.closest('[data-add-cots]')){cotsController.edit();return;}const finish=e.target.closest('[data-finish-piece]');if(finish){const part=state.parts.find(p=>p.id===finish.dataset.finishPiece);try{const updated=recordCompletion(part,Math.min(demand(part),completedQuantity(part)+1));if(save({...state,parts:state.parts.map(p=>p.id===part.id?updated:p)}))render();}catch(err){toast(err.message);}return;}const order=e.target.closest('[data-cots-order]'),received=e.target.closest('[data-cots-receive]');if(order||received){cotsController.quick((order||received).dataset[order?'cotsOrder':'cotsReceive'],Boolean(received));return;}const block=e.target.closest('[data-block]');if(block){openWork(block.dataset.block);return;}const advance=e.target.closest('[data-advance]');if(advance){if(advance.dataset.next==='Finished')openWork(advance.dataset.advance);else changeStatus(advance.dataset.advance,advance.dataset.next);return;}const button=e.target.closest('[data-edit]');if(button){if(view==='cots')cotsController.edit(button.dataset.edit);else openWork(button.dataset.edit);}};
 $('#records').onchange=e=>{if(e.target.dataset.status){changeStatus(e.target.dataset.status,e.target.value);}};
+initBoardDrag({root:$('#records'),canMove:()=>!!shared?.ready&&accessRole!=='viewer',getPart:id=>state.parts.find(p=>p.id===id),onUnavailable:()=>toast('Sign in and wait for the board to sync before moving parts.'),onMove:(id,status,original)=>{
+ if(!shared?.ready||accessRole==='viewer'){toast('Wait for the board to sync before moving parts.');return;}
+ const part=state.parts.find(p=>p.id===id);
+ if(!part||JSON.stringify(part)!==original){toast('This part changed while you were dragging. Check it and try again.');return;}
+ if(part.status===status)return;
+ if(status==='Finished'){
+  if(part.status!=='Finishing'){toast('Move this part to Finishing before submitting finished work.');return;}
+  openWork(id);return;
+ }
+ changeStatus(id,status);
+}});
+
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 $('#add-record').onclick=()=>edit();['#close-dialog','#cancel-dialog'].forEach(s=>$(s).onclick=()=>$('#record-dialog').close());['#search','#status-filter','#tag-filter','#subsystem-filter'].forEach(s=>$(s).addEventListener('input',render));
 function download(content,type,name){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
