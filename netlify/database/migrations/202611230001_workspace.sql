@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS workspace_state (
+  id TEXT PRIMARY KEY,
+  state_json TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0
+);

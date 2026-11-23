@@ -33,3 +33,5 @@ progress{appearance:none;width:100%;height:9px;border:0;border-radius:20px;overf
 .queue-options{width:100%}.queue-options>summary{font-size:14px;color:#43516a;min-height:44px;padding:12px 0}.queue-options[open] .queue-controls{padding:12px 0}.queue-options label{min-width:140px}.shop-mode .queue-options>summary{font-size:18px}.shop-mode .workflow-tabs .secondary{min-height:52px;font-size:18px}
 
 .dialog-input{display:grid;gap:8px;margin:20px 0;font-size:16px}.dialog-input input,.dialog-input select{min-width:0;width:100%;min-height:44px}.bulk-preview{max-height:35vh;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:6px;font-size:14px}
+
+.auth-screen{display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px}.auth-card{width:100%;max-width:460px;background:white;border:1px solid var(--line);padding:32px;border-radius:12px}.auth-card h1{margin:24px 0 16px}.auth-card form{display:grid;gap:16px;margin:24px 0}.auth-card label{display:grid;gap:7px;font-size:16px}.auth-card button{width:100%;min-height:48px}.auth-card #auth-message{margin-bottom:20px;font-size:16px}

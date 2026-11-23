@@ -3,5 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "node scripts/serve.mjs", "build": "node scripts/build-worker.mjs", "test": "node --test", "check": "node --check dist/app.js && node --check dist/model.js && node --check worker/onshape-api.js" }
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build-worker.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node --check dist/app.js && node --check dist/model.js && node --check worker/onshape-api.js",
+    "build:netlify": "node scripts/build-netlify.mjs"
+  },
+  "dependencies": {
+    "@netlify/database": "2.0.3",
+    "@netlify/identity": "2.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

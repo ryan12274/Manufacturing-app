@@ -1,4 +1,7 @@
 node_modules/
+netlify-public/
+netlify/generated/
+.netlify/
 outputs/
 dist/server/
 dist/.openai/
