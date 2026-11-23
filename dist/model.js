@@ -3,7 +3,7 @@ import {normalizeProjects,validProjects} from './projects.js';
 import {validCots} from './cots-model.js';
 export const STATUSES = ['Not started', 'Preparing', 'Cutting', 'Finishing', 'Finished'];
 const LEGACY_STATUSES=['Ready','In progress','Blocked','Complete'];
-export const STORAGE_KEY = 'frc7028-workshop-v1';
+export const STORAGE_KEY = typeof document!=='undefined'&&document.body?.dataset.publicView==='true'?'frc7028-public-board-v1':'frc7028-workshop-v1';
 export function normalizeAssignments(workspace) {
   const stages={Ready:'Preparing','In progress':'Cutting',Blocked:'Preparing',Complete:'Finished'};
   return migrateOperations(normalizeProjects({...workspace,cots:workspace.cots??[],parts:workspace.parts.map(p=>({...p,status:stages[p.status]||p.status,blocked:p.status==='Blocked'||p.blocked===true,assignedTo:p.assignedTo??p.owner,completedQty:p.completedQty??(['Complete','Finished'].includes(p.status)?p.quantity:0),readiness:p.readiness??{drawingReviewed:false,materialReady:false,setupReady:false}}))}));

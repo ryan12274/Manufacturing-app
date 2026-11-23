@@ -1,30 +1,20 @@
 import {getUser,getSettings,login,logout,oauthLogin,handleAuthCallback,acceptInvite,updateUser} from '@netlify/identity';
-const root=document.createElement('main');root.className='auth-screen';root.innerHTML='<section class="auth-card"><span class="team-number">7028</span><h1>Manufacturing</h1><p id="auth-message" role="status">Checking your sign-in…</p><div id="auth-actions"></div></section>';
-document.body.replaceChildren(root);
-const message=text=>document.getElementById('auth-message').textContent=text;
-const actions=document.getElementById('auth-actions');
-async function openWorkspace(){const response=await fetch('/api/session',{cache:'no-store'}),data=await response.json();if(!response.ok)throw Error(data.error||'Could not open the team workspace.');location.reload();}
+const root=document.createElement('main');root.className='auth-screen';root.innerHTML='<section class="auth-card"><span class="team-number">7028</span><h1>Manufacturing</h1><p id="hosting-status" role="status">Loading the board…</p></section>';document.body.replaceChildren(root);
+async function signIn(current){
+ const dialog=document.createElement('dialog');dialog.className='auth-card';dialog.innerHTML='<div class="dialog-heading"><h2>Sign in to make changes</h2><button type="button" class="icon-button" aria-label="Close sign in">×</button></div><p class="auth-message" role="status">The board is available without signing in. Editing requires an approved team account.</p><div class="auth-actions"></div>';document.body.append(dialog);dialog.querySelector('.icon-button').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.showModal();const say=text=>dialog.querySelector('.auth-message').textContent=text;
+ try{const settings=await getSettings(),actions=dialog.querySelector('.auth-actions');actions.innerHTML=(settings.providers.google?'<button class="primary" data-google>Continue with Google</button>':'')+'<form><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Sign in</button></form>'+(current?'<button class="secondary" data-signout>Use another account</button>':'');actions.querySelector('[data-google]')?.addEventListener('click',()=>oauthLogin('google'));actions.querySelector('[data-signout]')?.addEventListener('click',async()=>{await logout();location.reload();});actions.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await login(e.target.elements.email.value,e.target.elements.password.value);const r=await fetch('/api/session',{cache:'no-store'}),d=await r.json();if(!r.ok||d.publicView)throw Error(d.error||'This account is not approved to make changes.');location.reload();}catch(err){say(err.message);button.disabled=false;}};}catch(err){say('Sign-in is not configured yet. The board remains available.');}
+}
 async function start(){
  try{
-  const callback=await handleAuthCallback();
-  if(callback?.type==='invite'||callback?.type==='recovery'){
-   message('Set your own password to complete this account request.');
-   actions.innerHTML='<form id="new-password"><label>New password<input type="password" name="password" minlength="12" autocomplete="new-password" required></label><button class="primary">Set password and sign in</button></form>';
-   document.getElementById('new-password').onsubmit=async e=>{e.preventDefault();try{const password=e.target.elements.password.value;if(callback.type==='invite')await acceptInvite(callback.token,password);else await updateUser({password});await openWorkspace();}catch(err){message(err.message);}};return;
-  }
-  const current=await getUser();
-  if(current){
-   const response=await fetch('/api/session',{cache:'no-store'}),data=await response.json();if(!response.ok){message(data.error||'Your account cannot open this workspace.');actions.innerHTML='<button class="secondary" id="sign-out">Use another account</button>';document.getElementById('sign-out').onclick=async()=>{await logout();location.reload();};return;}
-   document.body.innerHTML=await (await fetch('/app-shell.html',{cache:'no-store'})).text();
-   // app-shell contains only body markup, with no executable scripts.
-   const signout=document.createElement('button');signout.className='secondary';signout.textContent='Sign out';signout.onclick=async()=>{await logout();location.reload();};document.querySelector('.header-actions')?.append(signout);
-   await import('./app.js');return;
-  }
-  const settings=await getSettings();
-  message('Sign in with an approved team account. Preview data is separate from production.');
-  actions.innerHTML=(settings.providers.google?'<button id="google-login" class="primary">Continue with Google</button>':'')+'<form id="email-login"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Sign in</button></form><p class="helper">New accounts need approval from the team admin. Signing in to the Netlify dashboard does not sign you in to this app.</p>';
-  document.getElementById('google-login')?.addEventListener('click',()=>oauthLogin('google'));
-  document.getElementById('email-login').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await login(e.target.elements.email.value,e.target.elements.password.value);await openWorkspace();}catch(err){message(err.message);button.disabled=false;}};
- }catch(error){message('Sign-in is unavailable: '+error.message);}
+ const callback=await handleAuthCallback();if(callback?.type==='invite'||callback?.type==='recovery'){root.querySelector('#hosting-status').textContent='Set your own password to complete this account request.';const form=document.createElement('form');form.innerHTML='<label>New password<input name="password" type="password" minlength="12" autocomplete="new-password" required></label><button class="primary">Set password and sign in</button>';root.querySelector('section').append(form);form.onsubmit=async e=>{e.preventDefault();try{if(callback.type==='invite')await acceptInvite(callback.token,form.elements.password.value);else await updateUser({password:form.elements.password.value});location.reload();}catch(err){root.querySelector('#hosting-status').textContent=err.message;}};return;}
+ const current=await getUser(),response=await fetch('/api/session',{cache:'no-store'}),session=await response.json();if(!response.ok)throw Error(session.error||'The board is unavailable.');const shell=await fetch('/app-shell.html',{cache:'no-store'});if(!shell.ok)throw Error('App files could not be loaded. Retry shortly.');document.body.innerHTML=await shell.text();
+ const button=document.createElement('button');button.className='secondary';button.textContent=session.publicView?'Sign in to make changes':'Sign out';button.onclick=session.publicView?()=>signIn(current):async()=>{await logout();location.reload();};document.querySelector('.header-actions')?.append(button);
+ if(session.publicView||session.role==='viewer'){
+  document.body.dataset.publicView='true';const notice=document.createElement('div');notice.className='public-view-notice';notice.innerHTML='<span>View only · Sign in to make changes</span>';const action=document.createElement('button');action.className='secondary';action.textContent='Sign in';action.onclick=()=>signIn(current);notice.append(action);document.querySelector('main').prepend(notice);
+  document.addEventListener('click',e=>{if(e.target.closest('[data-advance],[data-block],[data-finish-piece],[data-cots-order],[data-cots-receive],[data-vendor-cart],#bulk-update')){e.preventDefault();e.stopImmediatePropagation();void signIn(current);}},true);
+  const readonly=()=>{for(const id of ['migration-backup','unsynced-backup','cleanup-backup']){const recovery=document.getElementById(id);if(recovery)recovery.hidden=true;}for(const form of document.querySelectorAll('#work-form,#cots-form')){if(!form.querySelector('.public-readonly-note')){const note=document.createElement('p');note.className='public-readonly-note helper';note.textContent='View only. Sign in to change this record. ';const signin=document.createElement('button');signin.type='button';signin.className='secondary';signin.textContent='Sign in';signin.onclick=()=>signIn(current);note.append(signin);form.prepend(note);}for(const field of form.querySelectorAll('input,textarea,select'))field.disabled=true;for(const save of form.querySelectorAll('button[type="submit"]'))save.disabled=true;}for(const stage of document.querySelectorAll('[data-status]'))stage.disabled=true;};new MutationObserver(readonly).observe(document.body,{childList:true,subtree:true});readonly();
+ }
+ await import('./app.js');
+ }catch(err){document.body.replaceChildren(root);root.querySelector('#hosting-status').textContent=err.message;}
 }
 start();
