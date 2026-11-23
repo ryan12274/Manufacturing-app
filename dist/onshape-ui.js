@@ -2,7 +2,7 @@ import {partColorDot} from './part-colors.js';
 import {mergeOnshapeBom,resolveBomConflict,selectedBom} from './onshape-import.js';
 import {parseTeamPartNumber} from './subsystem-rules.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export function initOnshape({getWorkspace,save,onChanged,toast,enabled=()=>true}){
+export function initOnshape({getWorkspace,save,onChanged,onImported=()=>{},toast,enabled=()=>true}){
  const $=s=>document.querySelector(s);let configured=false,busy=false,lastData=null,preview=null,lastConflicts=[],automatic=false;
  const preferenceKey='frc7028-onshape-selection-v1';let preference=null;
  try{preference=JSON.parse(localStorage.getItem(preferenceKey));}catch{}
@@ -68,9 +68,9 @@ export function initOnshape({getWorkspace,save,onChanged,toast,enabled=()=>true}
   $('#onshape-selection').onclick=e=>{if(e.target.closest('[data-select-all],[data-select-none]')){const checked=!!e.target.closest('[data-select-all]');for(const el of document.querySelectorAll('[data-import-row]'))el.checked=checked;stopAutomatic();updatePreview();}};
   updatePreview();
  }
- function apply(data){
+ async function apply(data){
   const result=mergeOnshapeBom(getWorkspace(),data);result.workspace.importState={lastSuccess:new Date().toISOString(),source:'Selected read-only BOM'};
-  if(!save(result.workspace))return null;onChanged();return result;
+  if(!await save(result.workspace))throw Error('Check the sync status and retry.');onChanged();return result;
  }
  async function scan(auto=false){
   if(!enabled()){report('Choose a BOM destination in Admin before importing.');return;}
@@ -82,27 +82,30 @@ export function initOnshape({getWorkspace,save,onChanged,toast,enabled=()=>true}
   try{
    const query=requestSource?'?'+new URLSearchParams({source:requestSource}):'';
    const data=await json('/api/onshape/parts'+query);
-   if(auto){const chosen=selectedBom(data,preference.selectedKeys);chosen.projectId=preference.projectId;chosen.subsystemRules=getWorkspace().subsystemRules?.[chosen.projectId]||{};const result=apply(chosen);if(result){showSummary(result);$('#onshape-last-sync').textContent='Import queued. Waiting for server confirmation.';}return;}
+   if(auto){const chosen=selectedBom(data,preference.selectedKeys);chosen.projectId=preference.projectId;chosen.subsystemRules=getWorkspace().subsystemRules?.[chosen.projectId]||{};const result=await apply(chosen);if(result){showSummary(result);$('#onshape-last-sync').textContent='Import saved to '+(getWorkspace().projects.find(p=>p.id===getWorkspace().onshapeProjectId)?.name||'the BOM destination')+'.';}return;}
    renderSelection(data,requestSource);
   }catch(err){preview=null;$('#onshape-import').hidden=true;report('Import failed: '+err.message);if(auto)toast('Onshape auto-import failed. Open import for details.');}
   finally{setBusy(false);}
  }
- $('#onshape-conflicts').onclick=e=>{
-  const button=e.target.closest('[data-resolve]');if(!button||!preview)return;
-  try{const linked=resolveBomConflict(getWorkspace(),lastConflicts[Number(button.dataset.resolve)],button.dataset.existing||''),result=mergeOnshapeBom(linked,preview);if(save(result.workspace)){onChanged();updatePreview();toast('Import conflict resolved');}}
-  catch(err){report(err.message);}
+ $('#onshape-conflicts').onclick=async e=>{
+  const button=e.target.closest('[data-resolve]');if(!button||!preview||busy)return;
+  setBusy(true);try{const linked=resolveBomConflict(getWorkspace(),lastConflicts[Number(button.dataset.resolve)],button.dataset.existing||''),result=mergeOnshapeBom(linked,preview);if(await save(result.workspace)){onChanged();updatePreview();toast('Import conflict resolved');}}
+  catch(err){report(err.message);}finally{setBusy(false);}
  };
  $('#open-onshape').onclick=async()=>{$('#onshape-dialog').showModal();await checkConnection();};
  $('#close-onshape').onclick=()=>$('#onshape-dialog').close();$('#onshape-scan').onclick=()=>scan();
- $('#onshape-import').onclick=()=>{
-  if(!preview)return;
+ $('#onshape-import').onclick=async()=>{
+  if(!preview||busy)return;
+  const selection=preview,confirmedSource=sourceUrl();
+  setBusy(true);report('Saving import to '+(getWorkspace().projects.find(p=>p.id===selection.projectId)?.name||'the BOM destination')+'…');
   try{
-   const result=apply(preview);if(!result)return;
+   const result=await apply(selection);
    const chosen=rows().filter((p,n)=>document.querySelector('[data-import-row="'+n+'"]')?.checked).map(p=>p.key);
-   preference={sourceUrl:sourceUrl(),projectId:preview.projectId,selectedKeys:preview.partial?chosen:null};
+   preference={sourceUrl:confirmedSource,projectId:selection.projectId,selectedKeys:selection.partial?chosen:null};
    try{localStorage.setItem(preferenceKey,JSON.stringify(preference));}catch{}
-   showSummary(result);preview=null;$('#onshape-import').hidden=true;$('#onshape-last-sync').textContent='Import queued. Waiting for server confirmation.';toast('Selected BOM rows imported');
-  }catch(err){report(err.message);}
+   showSummary(result);preview=null;$('#onshape-import').hidden=true;$('#onshape-last-sync').textContent='Import saved to '+(getWorkspace().projects.find(p=>p.id===getWorkspace().onshapeProjectId)?.name||'the BOM destination')+'.';const projectName=getWorkspace().projects.find(p=>p.id===selection.projectId)?.name||'the BOM destination';
+   $('#onshape-dialog').close();onImported(selection.projectId,selection.parts.length?'parts':'cots');toast('Import saved to '+projectName+' · '+result.workspace.parts.length+' part cards · '+result.workspace.cots.length+' COTS item'+(result.workspace.cots.length===1?'':'s')+(result.conflicts.length?' · '+result.conflicts.length+' conflicts need review':''));
+  }catch(err){report('Import not saved: '+err.message);}finally{setBusy(false);}
  };
  $('#onshape-auto').onchange=async e=>{
   if(e.target.checked&&!preference){e.target.checked=false;report('Import your selection once before enabling auto-import.');return;}
