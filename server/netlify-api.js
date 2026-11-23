@@ -6,7 +6,7 @@ import {postgresWorkspaceDatabase} from './netlify-database.js';
 const emails=value=>String(value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 export function publicBoard(w){
  const projects=w.projects.filter(p=>!p.archived),active=new Set(projects.map(p=>p.id));
- const partFields=['id','projectId','name','number','subsystem','material','process','quantity','completedQty','acceptedQty','spareTarget','reworkQty','scrapQty','owner','assignedTo','priority','due','status','readiness','blocked','blockReason','blockOwner','blockNext','blockDate','blockExpected','location','revision','sourceMissing'];
+ const partFields=['id','projectId','name','number','subsystem','material','color','process','quantity','completedQty','acceptedQty','spareTarget','reworkQty','scrapQty','owner','assignedTo','priority','due','status','readiness','blocked','blockReason','blockOwner','blockNext','blockDate','blockExpected','location','revision','sourceMissing'];
  const cotsFields=['id','projectId','name','number','vendor','needed','ordered','received','stock','allocated','packSize','location','subsystem','url','eta'];
  return {version:1,schemaVersion:2,demo:false,projects,students:[],materials:[],onshapeProjectId:'',
   parts:w.parts.filter(p=>active.has(p.projectId)).map(p=>({...Object.fromEntries(partFields.filter(k=>p[k]!==undefined).map(k=>[k,p[k]])),notes:'',cad:'',instructions:'',history:[],...(p.approval?{approval:{status:p.approval.status,reviewedBy:'Admin',...(p.approval.reviewedAt?{reviewedAt:p.approval.reviewedAt}:{})}}:{})})),

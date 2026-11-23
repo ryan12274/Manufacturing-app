@@ -17,7 +17,7 @@ Open http://127.0.0.1:7028. The local server creates an ignored `outputs/dev-wor
 
 The first navigation control selects the project; every project has a name and year. Admins can choose **New Project** at the bottom of the selector. Legacy projects without a year receive the current year and can be edited in Admin.
 
-- **Parts:** sortable columns for part name/number, subsystem, stage, material, student, and due date. Admins add parts from the search toolbar and assign students from the roster.
+- **Parts:** sortable columns for part name/number, subsystem, stage, material, color, student, and due date. Admins add parts from the search toolbar and assign students from the roster.
 - **Production:** project-wide Parts Made progress, compact Not Started / Cutting / Finishing / Done / Blocked cards, subsystem filtering, and a four-stage board. Summary denominators always use the whole project, even when the board is filtered.
 - **COTS:** vendor cards open order lists (or prepare WCP carts). The card count is the total required quantity for the vendor; its bar measures quantity already covered by stock or orders. The table shows Required, In House (available stock plus received purchases), Ordered, Status, and Expected. Order and Receive actions retain cumulative purchasing history.
 - **Admin:** student roster and account linking, project names/years, BOM destination, Onshape import, CSV export, backup/restore, and activity/recovery. Former More-menu actions live here. Choose Parts or COTS before exporting CSV.
@@ -39,7 +39,11 @@ The backup envelope remains version 1, with additive schemaVersion 2 operations.
 
 ## Onshape integration
 
-Only the explicitly configured assembly BOM is read, using signed GET requests. No document scans, Part Studio discovery, metadata fallback, BOM creation, or Onshape writes are performed. Requests retain `generateIfAbsent=false`, `indented=false`, `includeExcluded=false`, and `includeTopLevelAssemblyRow=false`.
+The explicitly configured assembly BOM is the only source of part discovery. Signed GET requests retain `generateIfAbsent=false`, `indented=false`, `includeExcluded=false`, and `includeTopLevelAssemblyRow=false`. No document scans, Part Studio discovery, BOM creation, or Onshape writes are performed.
+
+Colors use BOM appearance/color data when present. Otherwise the server reads appearance metadata for only the exact manufactured leaf parts identified by that BOM, using each part's document, element, configuration, and workspace/version/microversion. Linked versions include the approved assembly document context. These color-only reads do not discover or import extra parts. They use the [Onshape part metadata API](https://onshape-public.github.io/docs/api-adv/metadata/), with bounded responses, four concurrent requests, deduplication per CAD appearance target, and the existing overall import timeout. Purchasing quantities and COTS imports remain unchanged.
+
+Part colors are generalized into Black (`#000000`), White (`#ffffff`), Blue (`#001489`), or Yellow (`#ffd400`). Hue families accept shades such as gold, pale yellow, navy, and light blue; exact source matches are not required. Parts and Todo show a Color column, and compact Production cards place a dot next to the part name. White has a contrasting outline. Missing colors use an outlined placeholder until available; import warnings identify unavailable colors without clearing an existing color. Admins can select one of the four colors in part details. Onshape owns imported color unless the part's local CAD metadata override is enabled. Source hex values remain in private Onshape metadata; public views receive only the canonical team color.
 
 Runtime secrets:
 
@@ -49,7 +53,11 @@ Runtime secrets:
 
 For local integration testing, copy `.env.example` to ignored `.env`, enter credentials, and start with `node --env-file=.env scripts/serve.mjs`. Never commit secrets.
 
-Leaf parts with numbers beginning 7028 import into Parts. Other numbered leaf parts and explicitly purchased/standard content import into COTS. Unidentified custom rows, excluded rows, and subassemblies are skipped. Repeated imports update BOM-owned fields while preserving production and purchasing progress. Distinct CAD identities sharing a number stay separate; manual collisions require explicit resolution. Quantity increases reopen completed work when required, preserving completed quantities. Missing source entries are flagged rather than deleted. Auto-import remains an explicit browser opt-in every five minutes while open and visible.
+Leaf parts with numbers beginning 7028 import into Parts. Each required manufactured unit gets its own quantity-one record. A BOM quantity of three creates `Rear Rail (A)`, `Rear Rail (B)`, and `Rear Rail (C)`; every instance keeps the original part number. Lettering continues with `(AA)` after `(Z)`. A source with quantity one keeps its original name until it becomes a multi-instance part. COTS remains aggregated by vendor/SKU with its full purchasing quantity.
+
+Instances use the CAD source identity and a stable unit ordinal. Repeated imports reuse their IDs, student assignments, stages, and production counts. Quantity increases create additional unassigned instances without reopening completed units. Quantity reductions retain excess instances and flag them for review rather than deleting work; returning demand reuses those instances. Existing imported batches split on the next import, keeping the original record ID for instance A. Completed, spare, rework, and scrap totals are distributed without duplication, and existing workflow/history is preserved. This conversion is admin-only and does not create new approvals. Source changes still invalidate affected readiness checks. Expanded imports are limited to 10,000 manufactured instances.
+
+Other numbered leaf parts and explicitly purchased/standard content import into COTS. Unidentified custom rows, excluded rows, and subassemblies are skipped. Repeated imports preserve purchasing progress. Distinct CAD identities sharing a number stay separate; manual collisions require explicit resolution. Missing source entries are flagged rather than deleted. Auto-import remains an explicit browser opt-in every five minutes while open and visible.
 
 ## Hosting
 

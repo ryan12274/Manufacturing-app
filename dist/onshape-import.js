@@ -1,4 +1,5 @@
 // Shared by the browser importer and the server API. No credentials belong here.
+import {partColorHex,generalizePartColor,isPartColor} from './part-colors.js';
 export const PART_PREFIX='7028';
 const clean=value=>typeof value==='string'?value.trim().slice(0,500):'';
 const usableBomValue=value=>!!value&&!/^(n\/?a|null|none|undefined|-)$/i.test(value);
@@ -7,6 +8,7 @@ export function mapOnshapeBom(bom,source){
  if(bom.rows.length>10000)throw new Error('Onshape BOM contains too many rows.');
  const columns=new Map(bom.headers.map(h=>[h.propertyName,h.id]));
  if(!columns.has('partNumber')||!columns.has('quantity'))throw new Error('Onshape BOM is missing the part number or quantity column.');
+ const colorColumns=bom.headers.filter(h=>[h.propertyName,h.name,h.displayName].some(v=>/^(color|colour|appearance|hexcolor|colorhex)$/i.test(String(v||'').replace(/[ _-]/g,'')))).map(h=>h.id);
  let ignored=0;const parts=[],purchased=new Map();
  for(const row of bom.rows){
   const cells=row.headerIdToValue||{},item=row.itemSource;
@@ -21,7 +23,12 @@ export function mapOnshapeBom(bom,source){
   const cad=clean(item.viewHref)||`${source.origin}/documents/${source.documentId}/${source.reference}/${source.referenceId}/e/${source.elementId}`;
   const material=cells[columns.get('material')];
   const name=clean(cells[columns.get('name')])||number||'Standard hardware';
-  if(number.startsWith(PART_PREFIX))parts.push({key,number,name,material:clean(typeof material==='string'?material:material?.displayName),cad,quantity});
+  if(number.startsWith(PART_PREFIX)){
+   const hex=[row.appearance,item.appearance,...colorColumns.map(id=>cells[id])].map(v=>partColorHex(v)).find(Boolean)||'';
+   parts.push({key,number,name,material:clean(typeof material==='string'?material:material?.displayName),cad,quantity,
+    ...(hex?{colorHex:hex,color:generalizePartColor(hex)}:{}),
+    appearanceSource:{documentId:item.documentId,elementId:item.elementId,partId:item.partId,reference:item.wvmType,referenceId:item.wvmId,configuration:item.fullConfiguration||item.configuration||'',elementMicroversionId:item.sourceElementMicroversionId,viewHref:item.viewHref}});
+  }
   else{
    // A vendor SKU may occur in several CAD rows. Order its combined BOM quantity.
    const cotsKey=usableBomValue(number)?JSON.stringify(['bom-cots',source.origin,source.documentId,source.reference,source.referenceId,source.elementId,source.configuration||'',vendor||'Unassigned',number]):key;
@@ -75,32 +82,104 @@ export function mergeOnshapeCots(workspace,incoming,idFactory=()=>crypto.randomU
 export function mergeOnshapeBom(workspace,data,idFactory){
  const manufactured=mergeOnshapeParts(workspace,data.parts,idFactory);
  const purchased=mergeOnshapeCots(manufactured.workspace,data.cots||[],idFactory);
- const incoming=new Set([...(data.parts||[]),...(data.cots||[])].map(p=>p.key));const preview=[];for(const kind of ['parts','cots'])for(const item of purchased.workspace[kind]){if(item.onshape?.key&&!incoming.has(item.onshape.key)){item.sourceMissing=true;preview.push({id:item.id,name:item.name,change:'No longer in BOM; retained for review'});}const old=(workspace[kind]||[]).find(p=>p.id===item.id);if(!old)preview.push({id:item.id,name:item.name,change:'New record'});else{const fields=(kind==='parts'?['name','number','material','quantity']:['name','number','needed']).filter(k=>old[k]!==item[k]);if(fields.length)preview.push({id:item.id,name:item.name,change:fields.map(k=>k+': '+old[k]+' → '+item[k]).join(', ')});}if(kind==='parts'&&(!item.material||!item.process))preview.push({id:item.id,name:item.name,change:'Missing material or process; requires shop setup'});}
- return {preview,workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts],conflictDetails:[...manufactured.conflictDetails,...purchased.conflictDetails],sharedNumbers:manufactured.sharedNumbers};
+ const incoming=new Set([...(data.parts||[]),...(data.cots||[])].map(p=>p.key));const preview=[];for(const kind of ['parts','cots'])for(const item of purchased.workspace[kind]){if(item.onshape?.key&&(!incoming.has(item.onshape.key)||kind==='parts'&&item.sourceMissing)){item.sourceMissing=true;preview.push({id:item.id,name:item.name,change:'No longer in BOM; retained for review'});}const old=(workspace[kind]||[]).find(p=>p.id===item.id);if(!old)preview.push({id:item.id,name:item.name,change:'New record'});else{const fields=(kind==='parts'?['name','number','material','color','quantity']:['name','number','needed']).filter(k=>old[k]!==item[k]);if(fields.length)preview.push({id:item.id,name:item.name,change:fields.map(k=>k+': '+old[k]+' → '+item[k]).join(', ')});}if(kind==='parts'&&(!item.material||!item.process))preview.push({id:item.id,name:item.name,change:'Missing material or process; requires shop setup'});}
+ return {preview,colorWarnings:data.colorWarnings||[],workspace:purchased.workspace,manufactured,purchased,added:manufactured.added+purchased.added,updated:manufactured.updated+purchased.updated,unchanged:manufactured.unchanged+purchased.unchanged,conflicts:[...manufactured.conflicts,...purchased.conflicts],conflictDetails:[...manufactured.conflictDetails,...purchased.conflictDetails],sharedNumbers:manufactured.sharedNumbers};
 }
 
+// Stable unit ordinals belong to a CAD identity, never to a part number.
+// Spreadsheet-style lettering continues with AA, AB, ... after Z.
+export function instanceSuffix(ordinal){
+ if(!Number.isSafeInteger(ordinal)||ordinal<1)throw Error('Invalid manufactured instance ordinal.');
+ let label='';for(let n=ordinal;n>0;n=Math.floor((n-1)/26))label=String.fromCharCode(65+(n-1)%26)+label;
+ return '('+label+')';
+}
+const MAX_MANUFACTURED_INSTANCES=10000;
+function splitManufacturedBatch(batch,idFactory){
+ if(batch.quantity>MAX_MANUFACTURED_INSTANCES)throw Error('Existing batch exceeds the 10,000 manufactured-instance import limit.');
+ const completed=batch.completedQty??(batch.status==='Done'?batch.quantity:0),spares=batch.spareTarget||0;
+ let good=completed,rework=batch.reworkQty||0;
+ const rows=Array.from({length:batch.quantity},(_,n)=>{
+  const made=Math.min(1,good);good-=made;
+  const repairing=Math.min(1-made,rework);rework-=repairing;
+  const {approval,acceptedQty,...original}=batch;
+  return {...original,id:n===0?batch.id:idFactory(),quantity:1,completedQty:made,
+   spareTarget:n===0?spares:0,reworkQty:repairing,scrapQty:n===0?(batch.scrapQty||0):0,
+   onshape:{...batch.onshape,instance:n+1,splitFrom:batch.id,sourceName:batch.name,sourceQuantity:batch.quantity}};
+ });
+ // Spare pieces and their rework stay on the original record, without duplication.
+ rows[0].completedQty+=good;rows[0].reworkQty+=rework;
+ return rows;
+}
+function importedInstance(part,ordinal,multiple,idFactory){
+ return {id:idFactory(),name:part.name+(multiple?' '+instanceSuffix(ordinal):''),number:part.number,material:part.material,cad:part.cad,color:part.color||'',
+  onshape:{key:part.key,mode:'bom',instance:ordinal,sourceName:part.name,sourceQuantity:part.quantity,...(part.colorHex?{colorHex:part.colorHex}:{})},
+  subsystem:'',process:'',quantity:1,completedQty:0,readiness:{drawingReviewed:false,materialReady:false,setupReady:false},
+  owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not Started',blocked:false,notes:''};
+}
 export function mergeOnshapeParts(workspace,incoming,idFactory=()=>crypto.randomUUID()){
  if(!Array.isArray(incoming))throw new Error('Invalid Onshape import response.');
  const sourceKeys=new Map(),numbers=new Map();
  for(const p of incoming){
   if(!p||!['key','number','name','material','cad'].every(k=>typeof p[k]==='string'&&p[k].length<=3000)||!p.number.startsWith(PART_PREFIX)||!p.key||!p.name||!Number.isSafeInteger(p.quantity)||p.quantity<1)throw new Error('Invalid matching part in Onshape response.');
+  if(p.color!==undefined&&!isPartColor(p.color)||p.colorHex!==undefined&&!/^#[0-9a-f]{6}$/i.test(p.colorHex))throw Error('Invalid manufactured part color.');
   const link=new URL(p.cad);if(link.protocol!=='https:'||!link.hostname.endsWith('.onshape.com'))throw new Error('Invalid Onshape CAD link.');
   if(sourceKeys.has(p.key)&&JSON.stringify(sourceKeys.get(p.key))!==JSON.stringify(p))throw new Error('Conflicting data for the same Onshape part.');
   sourceKeys.set(p.key,p);
   if(!numbers.has(p.number))numbers.set(p.number,new Set());numbers.get(p.number).add(p.key);
  }
- const parts=workspace.parts.map(p=>({...p}));let added=0,updated=0,unchanged=0;const conflicts=[],conflictDetails=[];
+ if([...sourceKeys.values()].reduce((n,p)=>n+p.quantity,0)>MAX_MANUFACTURED_INSTANCES)throw Error('BOM exceeds the 10,000 manufactured-instance import limit.');
+ const originalParts=new Map(workspace.parts.map(p=>[p.id,p]));
+ let parts=workspace.parts.map(p=>({...p})),added=0,updated=0,unchanged=0;
+ const conflicts=[],conflictDetails=[];
  for(const p of sourceKeys.values()){
-  const identityMatches=parts.filter(r=>r.onshape?.key===p.key);
-  const sameNumber=parts.filter(r=>r.number.trim()===p.number);
-  const manual=sameNumber.filter(r=>!r.onshape);if(identityMatches.length>1||(!identityMatches.length&&manual.length)){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:(identityMatches.length?identityMatches:manual).map(i=>i.id)});continue;}
-  const existing=identityMatches[0];
-  if(existing){
-   const completed=existing.completedQty??(existing.status==='Done'?existing.quantity:0);
-   if(p.quantity<completed){conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:[existing.id],reason:'BOM quantity is below the recorded finished quantity. Correct the finished count first.'});continue;}
-   const sourceFields=existing.localOverride?['quantity']:['name','number','material','cad','quantity'];const changed=sourceFields.some(k=>existing[k]!==p[k])||existing.sourceMissing;
-   if(changed){const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};if(['name','number','cad'].some(k=>existing[k]!==p[k]))readiness.drawingReviewed=false;if(['material','quantity'].some(k=>existing[k]!==p[k])){readiness.materialReady=false;readiness.setupReady=false;}const status=existing.status==='Done'&&p.quantity>completed?'Finishing':existing.status;Object.assign(existing,{...Object.fromEntries(sourceFields.map(k=>[k,p[k]])),sourceMissing:false,completedQty:completed,readiness,status});updated++;}else unchanged++;
-  }else{parts.push({id:idFactory(),name:p.name,number:p.number,material:p.material,cad:p.cad,onshape:{key:p.key,mode:'bom'},subsystem:'',process:'',quantity:p.quantity,completedQty:0,readiness:{drawingReviewed:false,materialReady:false,setupReady:false},owner:'',assignedTo:'',due:'',priority:'Normal',status:'Not Started',blocked:false,notes:''});added++;}
+  let group=parts.filter(r=>r.onshape?.key===p.key);
+  const legacy=group.filter(r=>r.onshape.instance===undefined);
+  const manual=parts.filter(r=>r.number.trim()===p.number&&!r.onshape);
+  const ordinals=group.map(r=>r.onshape.instance??1);
+  if(legacy.length>1||legacy.length&&group.length>1||new Set(ordinals).size!==ordinals.length||ordinals.some(n=>!Number.isSafeInteger(n)||n<1)||!group.length&&manual.length){
+   conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:(group.length?group:manual).map(i=>i.id)});continue;
+  }
+  if(!legacy.length&&group.some(r=>(r.completedQty||0)+(r.reworkQty||0)>1+(r.spareTarget||0))){
+   conflicts.push(p.number);conflictDetails.push({kind:'parts',part:p,existingIds:group.map(i=>i.id),reason:'An individual instance has batch-level production counts. Correct its counts or spare target before importing.'});continue;
+  }
+  if(legacy.length){
+   const batch=legacy[0],copies=splitManufacturedBatch(batch,idFactory);
+   parts=parts.flatMap(r=>r.id===batch.id?copies:[r]);group=copies;added+=copies.length-1;
+  }
+  // Keep lettering stable if the BOM later drops back to one required unit.
+  const multiple=p.quantity>1||group.some(r=>r.onshape.instance>1);
+  const byOrdinal=new Map(group.map(r=>[r.onshape.instance,r]));
+  for(let ordinal=1;ordinal<=p.quantity;ordinal++){
+   const existing=byOrdinal.get(ordinal);
+   if(!existing){parts.push(importedInstance(p,ordinal,multiple,idFactory));added++;continue;}
+   const suffix=' '+instanceSuffix(ordinal);
+   const localName=existing.name.endsWith(suffix)?existing.name.slice(0,-suffix.length):existing.name;
+   const name=(existing.localOverride?localName:p.name)+(multiple?suffix:'');
+   const fields=existing.localOverride?{name,quantity:1}:{name,number:p.number,material:p.material,cad:p.cad,quantity:1,...(p.color?{color:p.color}:{})};
+   const onshape={...existing.onshape,sourceName:p.name,sourceQuantity:p.quantity,...(p.colorHex?{colorHex:p.colorHex}:{})};
+   const before=originalParts.get(existing.id);
+   const changed=!before||Object.entries(fields).some(([k,v])=>existing[k]!==v)||existing.sourceMissing||JSON.stringify(before.onshape)!==JSON.stringify(onshape)||before.quantity!==1;
+   if(changed){
+    const readiness={drawingReviewed:false,materialReady:false,setupReady:false,...existing.readiness};
+    if(!existing.localOverride){
+     if((existing.onshape.sourceName??existing.name)!==p.name||existing.number!==p.number||existing.cad!==p.cad)readiness.drawingReviewed=false;
+     if(existing.material!==p.material){readiness.materialReady=false;readiness.setupReady=false;}
+    }
+    Object.assign(existing,fields,{onshape,sourceMissing:false,readiness});
+    if(before)updated++;
+   }else unchanged++;
+  }
+  // Quantity reductions never delete assigned work or completed pieces.
+  // Excess units can be reviewed/removed by the manager and reused if demand returns.
+  for(const extra of group.filter(r=>r.onshape.instance>p.quantity)){
+   const before=originalParts.get(extra.id);
+   const name=(extra.localOverride?extra.name:p.name+' '+instanceSuffix(extra.onshape.instance));
+   const color=!extra.localOverride&&p.color?p.color:extra.color;
+   const onshape={...extra.onshape,sourceQuantity:p.quantity,...(p.colorHex?{colorHex:p.colorHex}:{})};
+   if(!extra.sourceMissing||extra.name!==name||extra.color!==color||JSON.stringify(extra.onshape)!==JSON.stringify(onshape)){
+    Object.assign(extra,{name,color,sourceMissing:true,onshape});if(before)updated++;
+   }else if(before)unchanged++;
+  }
  }
  return {workspace:{...workspace,parts},added,updated,unchanged,conflicts:[...new Set(conflicts)],conflictDetails,sharedNumbers:[...numbers].filter(([,keys])=>keys.size>1).map(([number])=>number)};
 }
@@ -112,7 +191,7 @@ export function resolveBomConflict(workspace,detail,existingId='',idFactory=()=>
   const current=(workspace[kind]||[]).find(i=>i.id===existingId);
   if(!current||!detail.existingIds.includes(existingId))throw Error('This tracked record changed. Scan the BOM again.');
   if(current.onshape?.key&&current.onshape.key!==part.key)throw Error('This record is already linked to another BOM item. Keep them separate.');
-  next={...workspace,[kind]:workspace[kind].map(i=>{if(i.id===existingId)return {...i,onshape:{key:part.key,mode:'bom'}};if(i.onshape?.key===part.key){const copy={...i};delete copy.onshape;return copy;}return i;})};
+  next={...workspace,[kind]:workspace[kind].map(i=>{if(i.id===existingId)return {...i,onshape:{...i.onshape,key:part.key,mode:'bom'}};if(i.onshape?.key===part.key&&(kind==='cots'||i.onshape.instance===current.onshape?.instance)){const copy={...i};delete copy.onshape;return copy;}return i;})};
  }
  // A separate record is explicitly linked first, so manual number collisions cannot
  // cause the same unresolved conflict on subsequent syncs.

@@ -4,7 +4,7 @@ export const demand=p=>p.quantity+(p.spareTarget||0);
 export const accepted=p=>p.completedQty??(p.status==='Done'?p.quantity:0);
 export const shortfall=p=>Math.max(0,p.quantity-accepted(p));
 export function migrateOperations(w){
- return {...w,schemaVersion:2,parts:(w.parts||[]).map(({approval,acceptedQty,...p})=>({...p,spareTarget:p.spareTarget??0,reworkQty:p.reworkQty??0,scrapQty:p.scrapQty??0,revision:p.revision??'',instructions:p.instructions??'',location:p.location??'',blockOwner:p.blockOwner??'',blockNext:p.blockNext??'',blockDate:p.blockDate??'',blockExpected:p.blockExpected??'',dependency:p.dependency??'',sourceMissing:p.sourceMissing??false})),cots:(w.cots||[]).map(i=>({...i,stock:i.stock??0,allocated:i.allocated??0,packSize:i.packSize??1,location:i.location??'',location2:i.location2??'',subsystem:i.subsystem??''}))};
+ return {...w,schemaVersion:2,parts:(w.parts||[]).map(({approval,acceptedQty,...p})=>({...p,color:p.color??'',spareTarget:p.spareTarget??0,reworkQty:p.reworkQty??0,scrapQty:p.scrapQty??0,revision:p.revision??'',instructions:p.instructions??'',location:p.location??'',blockOwner:p.blockOwner??'',blockNext:p.blockNext??'',blockDate:p.blockDate??'',blockExpected:p.blockExpected??'',dependency:p.dependency??'',sourceMissing:p.sourceMissing??false})),cots:(w.cots||[]).map(i=>({...i,stock:i.stock??0,allocated:i.allocated??0,packSize:i.packSize??1,location:i.location??'',location2:i.location2??'',subsystem:i.subsystem??''}))};
 }
 export function validOperations(w){
  const whole=n=>Number.isSafeInteger(n)&&n>=0, text=(p,ks)=>ks.every(k=>p[k]===undefined||typeof p[k]==='string'&&p[k].length<=10000);

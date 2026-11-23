@@ -2,6 +2,20 @@ import {demand,mergeConcurrent,auditChanges} from '../dist/operations.js';
 import {readinessIssues,localDateKey} from '../dist/manufacturing.js';
 import {validWorkspace,normalizeAssignments} from '../dist/model.js';
 import {normalizeProjects} from '../dist/projects.js';
+function preservedBatchSplits(previous,next){
+ const preserved=new Set();
+ const unchangedFields=['projectId','status','owner','assignedTo','blocked','blockReason','blockOwner','blockNext','blockDate','blockExpected','notes','process','subsystem','due','priority','history','shortCloseReason','dependency','revision','instructions','location','localOverride'];
+ for(const source of previous.parts){
+  if(source.quantity<=1||source.onshape?.instance!==undefined)continue;
+  const units=next.parts.filter(p=>p.onshape?.splitFrom===source.id);
+  const original=units.find(p=>p.id===source.id&&p.onshape.instance===1);
+  if(!original||!original.onshape.key||source.onshape?.key&&source.onshape.key!==original.onshape.key||units.length!==source.quantity)continue;
+  if(new Set(units.map(p=>p.onshape.instance)).size!==units.length||units.some(p=>p.quantity!==1||p.onshape.key!==original.onshape.key||!Number.isInteger(p.onshape.instance)||p.onshape.instance<1||p.onshape.instance>source.quantity||unchangedFields.some(k=>JSON.stringify(p[k])!==JSON.stringify(source[k]))))continue;
+  if(['completedQty','spareTarget','reworkQty','scrapQty'].some(k=>units.reduce((n,p)=>n+(p[k]||0),0)!==(source[k]||0)))continue;
+  for(const p of units)preserved.add(p.id);
+ }
+ return preserved;
+}
 export function sessionIdentity(request,env){const email=(request.headers.get('oai-authenticated-user-email')||'').trim().toLowerCase(),id=request.headers.get('oai-authenticated-user-id')||'';const admins=String(env.ADMIN_EMAILS||'').toLowerCase().split(',').map(v=>v.trim()).filter(Boolean);const isAdmin=!!(id&&email&&admins.includes(email)),listed=key=>String(env[key]||'').toLowerCase().split(',').map(s=>s.trim()).includes(email),role=isAdmin?'admin':listed('VIEWER_EMAILS')?'viewer':listed('LEAD_EMAILS')?'lead':'member';return {authenticated:!!(id&&email),email,id,isAdmin,role};}
 const MEMBER_FIELDS=new Set(['completedQty','readiness','blocked','blockReason','notes','history','updatedAt','reworkQty','scrapQty','blockOwner','blockNext','blockDate','blockExpected','dependency']);
 export function memberCanSave(before,next){
@@ -34,7 +48,10 @@ export async function workspaceApi(request,env){
   if(next.parts.some(p=>p.status!=='Done'&&p.assignedTo&&!next.students.some(s=>s.active&&s.name===p.assignedTo)))return reply({error:'Advance assignments must use an active student.'},400);
   if(!who.isAdmin&&(JSON.stringify(next.projects)!==JSON.stringify(previous.projects)||JSON.stringify(next.students)!==JSON.stringify(previous.students)||next.onshapeProjectId!==previous.onshapeProjectId))return reply({error:'Only admins manage projects, students and the BOM destination.'},403);
   if(!who.isAdmin&&next.parts.some(p=>previous.parts.find(x=>x.id===p.id)?.status!==p.status))return reply({error:'Only admins can change manufacturing stages.'},403);
- for(const p of next.parts){const old=previous.parts.find(x=>x.id===p.id),changed=!old||JSON.stringify(p)!==JSON.stringify(old);if(!changed||restoring)continue;if(old?.status==='Done'&&p.status==='Done'&&p.completedQty<demand(p)&&!p.shortCloseReason&&(demand(p)>demand(old)||p.completedQty<old.completedQty)){p.status='Finishing';if(demand(p)>demand(old))p.readiness={...p.readiness,materialReady:false,setupReady:false};}
+  // Splitting an existing batch preserves its prior stage and recorded work.
+  // It is not a new stage transition; only admins can perform the conversion.
+  const preservedSplits=who.isAdmin?preservedBatchSplits(previous,next):new Set();
+ for(const p of next.parts){const old=previous.parts.find(x=>x.id===p.id),changed=!old||JSON.stringify(p)!==JSON.stringify(old);if(!changed||restoring||preservedSplits.has(p.id))continue;if(old?.status==='Done'&&p.status==='Done'&&p.completedQty<demand(p)&&!p.shortCloseReason&&(demand(p)>demand(old)||p.completedQty<old.completedQty)){p.status='Finishing';if(demand(p)>demand(old))p.readiness={...p.readiness,materialReady:false,setupReady:false};}
    if(p.blocked&&(!old?.blocked||p.blockReason!==old.blockReason)&&(!p.blockReason?.trim()||!p.blockOwner?.trim()||!p.blockNext?.trim()))return reply({error:'Blocked work needs a reason, resolution owner and next action.'},400);
    if(p.blocked&&!old?.blocked)p.blockDate=localDateKey();
    if(old&&(p.completedQty||0)>(old.completedQty||0)&&readinessIssues(p).length)return reply({error:'Resolve readiness and blockers before adding good pieces.'},400);

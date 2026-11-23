@@ -1,6 +1,7 @@
 import {migrateOperations,validOperations,demand} from './operations.js';
 import {normalizeProjects,validProjects} from './projects.js';
 import {validCots} from './cots-model.js';
+import {isPartColor} from './part-colors.js';
 export const STATUSES = ['Not Started', 'Cutting', 'Finishing', 'Done'];
 const LEGACY_STATUSES=['Not started','Preparing','Finished','Ready','In progress','Blocked','Complete'];
 export const STORAGE_KEY = typeof document!=='undefined'&&document.body?.dataset.publicView==='true'?'frc7028-public-board-v1':'frc7028-workshop-v1';
@@ -21,6 +22,7 @@ export function validWorkspace(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.parts) || !Array.isArray(data.materials)) return false;
   if(!validOperations(data))return false;
   if(!validProjects(data))return false;
+  if(data.parts.some(p=>p&&p.color!==undefined&&!isPartColor(p.color)))return false;
   if(data.cots!==undefined&&!validCots(data.cots))return false;
   if(data.parts.some(p=>p&&((p.completedQty!==undefined&&(!Number.isSafeInteger(p.completedQty)||p.completedQty<0||p.completedQty>demand(p)))||(p.readiness!==undefined&&(!p.readiness||typeof p.readiness!=='object'||Array.isArray(p.readiness)||!['drawingReviewed','materialReady','setupReady'].every(k=>typeof p.readiness[k]==='boolean')))||(p.history!==undefined&&(!Array.isArray(p.history)||p.history.length>50||!p.history.every(h=>h&&typeof h.at==='string'&&!Number.isNaN(Date.parse(h.at))&&typeof h.label==='string'&&h.label.length<=500&&typeof h.worker==='string'&&h.worker.length<=500))))))return false;
   const textFields = (row, fields) => fields.every(field => typeof row[field] === 'string' && row[field].length <= 10000);
